@@ -57,7 +57,7 @@ with col2:
         st.info("Sin datos.")
 
 st.markdown("---")
-c1, c2 = st.columns()
+c1, c2 = st.columns(2)
 with c1: st.subheader("📋 Datos Filtrados")
 with c2:
     if not df_filtrado.empty:
