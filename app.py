@@ -13,17 +13,28 @@ st.set_page_config(
     page_icon="⛈️"
 )
 
-# 2. Inyección de CSS para personalizar estilos (Fondo de barra lateral y Tamaño de Título)
+# 2. Inyección de CSS Avanzado (Fondo de página, Filtros en azul oscuro y textos de fechas en negro)
 st.markdown(
     """
     <style>
-    /* Cambiar el fondo de la barra de filtros a azul oscuro y sus letras a blanco */
+    /* Fondo de la página principal en plomo claro */
+    .stApp {
+        background-color: #E5E7EB !important;
+    }
+    
+    /* Cambiar el fondo de la barra de filtros a azul oscuro */
     [data-testid="stSidebar"] {
         background-color: #0A192F !important;
         color: #FFFFFF !important;
     }
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] span {
         color: #FFFFFF !important;
+    }
+    
+    /* Forzar que los textos y números dentro de los inputs de fechas sean negros */
+    [data-testid="stSidebar"] input {
+        color: #000000 !important;
+        font-weight: bold !important;
     }
     
     /* Modificar el título principal a un tamaño mediano */
@@ -38,7 +49,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Renderizar el título principal con la clase de tamaño mediano
+# Renderizar el título principal
 st.markdown('<p class="titulo-mediano">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>', unsafe_allow_html=True)
 st.markdown("### Integración de Métricas NOAA, Copernicus, CIIFEN e INOCAR para el Litoral Ecuatoriano")
 
@@ -59,11 +70,29 @@ data_points = [
 
 df_original = pd.DataFrame(data_points)
 
-# 4. Barra Lateral: Filtros
+# 4. Barra Lateral: Filtros y Selección de Mapa Base
 st.sidebar.header("⚙️ Filtros del Modelo")
 fecha_inicio = st.sidebar.date_input("Fecha Inicial", datetime.date(2026, 11, 1))
 fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2, 1))
 umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
+
+st.sidebar.markdown("---")
+st.sidebar.header("🗺️ Capas de Mapa Base")
+mapa_seleccionado = st.sidebar.selectbox(
+    "Selecciona el Mapa Base:",
+    ["Normal (OSM)", "Imagen (Satelital)", "Topológico"]
+)
+
+# Configuración dinámica del servidor de teselas (Tiles) según la selección
+if mapa_seleccionado == "Imagen (Satelital)":
+    map_tiles = "https://arcgisonline.com{z}/{y}/{x}"
+    map_attr = "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+elif mapa_seleccionado == "Topológico":
+    map_tiles = "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+    map_attr = "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)"
+else:
+    map_tiles = "OpenStreetMap"
+    map_attr = "OpenStreetMap contributors"
 
 # Aplicar filtros espacio-temporales
 df_filtrado = df_original[
@@ -72,9 +101,9 @@ df_filtrado = df_original[
     (df_original['riesgo'] >= umbral_riesgo)
 ].copy()
 
-# 5. CUADRO PRINCIPAL (SUPERIOR): MAPA OPENSTREETMAP
-st.subheader("📍 Mapa de Alertas Georreferenciadas (OpenStreetMap Engine)")
-m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles="OpenStreetMap")
+# 5. CUADRO PRINCIPAL (SUPERIOR): MAPA DE ALERTAS DINÁMICO
+st.subheader("📍 Mapa de Alertas Georreferenciadas")
+m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles=map_tiles, attr=map_attr)
 
 if not df_filtrado.empty:
     df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().reset_index()
@@ -114,7 +143,8 @@ if not df_filtrado.empty:
         ))
     fig.update_layout(
         xaxis_title="Fecha de Proyección", yaxis_title="Índice de Riesgo",
-        yaxis=dict(range=[0, 1.05]), height=380, margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified"
+        yaxis=dict(range=[0, 1.05]), height=380, margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified",
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
     )
     st.plotly_chart(fig, use_container_width=True)
 else:
@@ -123,7 +153,7 @@ else:
 st.markdown("---")
 
 # 7. CUADRO INFERIOR: TABLA DE DATOS COLOREADA Y BOTÓN DE DESCARGA
-tit_col, btn_col = st.columns([3, 1])
+tit_col, btn_col = st.columns()
 
 with tit_col:
     st.subheader("📋 Datos Filtrados y Alertas del Modelo")
@@ -133,24 +163,21 @@ def estilo_filas_alertas(row):
     styles = [''] * len(row)
     val_alerta = row['alerta']
     
-    # 1. Definir colores para las celdas de Cantón y Provincia basados en la alerta
     if val_alerta == "CRÍTICO":
-        bg_geo = 'background-color: #FEE2E2; color: #991B1B; font-weight: bold;'  # Rojo suave
-        bg_alerta = 'background-color: #8B0000; color: white; font-weight: bold;' # Rojo oscuro rígido
+        bg_geo = 'background-color: #FEE2E2; color: #991B1B; font-weight: bold;'
+        bg_alerta = 'background-color: #8B0000; color: white; font-weight: bold;'
     elif val_alerta == "ALTO RIESGO":
-        bg_geo = 'background-color: #FFFEF2; color: #9A3412; font-weight: bold;'  # Naranja suave
-        bg_alerta = 'background-color: #FF4D4D; color: white; font-weight: bold;' # Rojo brillante
+        bg_geo = 'background-color: #FFFEF2; color: #9A3412; font-weight: bold;'
+    	bg_alerta = 'background-color: #FF4D4D; color: white; font-weight: bold;'
     elif val_alerta == "ALERTA AMARILLA":
-        bg_geo = 'background-color: #FEF9C3; color: #713F12; font-weight: bold;'  # Amarillo suave
-        bg_alerta = 'background-color: #FFCC00; color: black; font-weight: bold;' # Amarillo brillante
+        bg_geo = 'background-color: #FEF9C3; color: #713F12; font-weight: bold;'
+        bg_alerta = 'background-color: #FFCC00; color: black; font-weight: bold;'
     elif val_alerta == "MEDIO (DESLAVE)":
-        bg_geo = 'background-color: #FFEDD5; color: #C2410C; font-weight: bold;'  # Ocre suave
-        bg_alerta = 'background-color: #FFA500; color: white; font-weight: bold;' # Naranja
+        bg_geo = 'background-color: #FFEDD5; color: #C2410C; font-weight: bold;'
+        bg_alerta = 'background-color: #FFA500; color: white; font-weight: bold;'
     else:
         return styles
 
-    # Aplicar los estilos a los índices específicos de las columnas correspondientes
-    # Columnas: ['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']
     styles[1] = bg_geo     # Columna: canton
     styles[2] = bg_geo     # Columna: provincia
     styles[5] = bg_alerta   # Columna: alerta
@@ -169,10 +196,9 @@ if not df_filtrado.empty:
     df_mostrar = df_filtrado[['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']].copy()
     df_mostrar['fecha'] = df_mostrar['fecha'].astype(str)
     
-    # Aplicar estilos condicionales por fila cruzando métricas
+    # Aplicar estilos condicionales
     df_estilizado = df_mostrar.style.apply(estilo_filas_alertas, axis=1)
     
     st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 else:
-    st.info("No hay datos que coincidan con los filtros seleccionados.")
 
