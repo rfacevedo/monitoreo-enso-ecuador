@@ -13,10 +13,36 @@ st.set_page_config(
     page_icon="⛈️"
 )
 
-st.title("⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)")
+# 2. Inyección de CSS para personalizar estilos (Fondo de barra lateral y Tamaño de Título)
+st.markdown(
+    """
+    <style>
+    /* Cambiar el fondo de la barra de filtros a azul oscuro y sus letras a blanco */
+    [data-testid="stSidebar"] {
+        background-color: #0A192F !important;
+        color: #FFFFFF !important;
+    }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] span {
+        color: #FFFFFF !important;
+    }
+    
+    /* Modificar el título principal a un tamaño mediano */
+    .titulo-mediano {
+        font-size: 28px !important;
+        font-weight: bold !important;
+        color: #1E3A8A;
+        margin-bottom: 5px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Renderizar el título principal con la clase de tamaño mediano
+st.markdown('<p class="titulo-mediano">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>', unsafe_allow_html=True)
 st.markdown("### Integración de Métricas NOAA, Copernicus, CIIFEN e INOCAR para el Litoral Ecuatoriano")
 
-# 2. Base de Datos Temporal de Prueba
+# 3. Base de Datos Temporal de Prueba
 data_points = [
     {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 210.5, "mar_cm": 35.0, "riesgo": 0.65, "alerta": "ALERTA AMARILLA", "lat": -1.80, "lon": -79.53, "fecha": datetime.date(2026, 11, 15)},
     {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 250.0, "mar_cm": 45.0, "riesgo": 0.95, "alerta": "CRÍTICO", "lat": -2.20, "lon": -79.89, "fecha": datetime.date(2026, 11, 15)},
@@ -33,10 +59,10 @@ data_points = [
 
 df_original = pd.DataFrame(data_points)
 
-# 3. Barra Lateral: Filtros
-st.sidebar.header("Filtros del Modelo Predictivo")
+# 4. Barra Lateral: Filtros
+st.sidebar.header("⚙️ Filtros del Modelo")
 fecha_inicio = st.sidebar.date_input("Fecha Inicial", datetime.date(2026, 11, 1))
-fecha_fin = st.sidebar.date_input("Fecha de Proyección (3 Meses)", datetime.date(2027, 2, 1))
+fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2, 1))
 umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
 # Aplicar filtros espacio-temporales
@@ -46,7 +72,7 @@ df_filtrado = df_original[
     (df_original['riesgo'] >= umbral_riesgo)
 ].copy()
 
-# 4. CUADRO PRINCIPAL (SUPERIOR): MAPA OPENSTREETMAP
+# 5. CUADRO PRINCIPAL (SUPERIOR): MAPA OPENSTREETMAP
 st.subheader("📍 Mapa de Alertas Georreferenciadas (OpenStreetMap Engine)")
 m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles="OpenStreetMap")
 
@@ -76,7 +102,7 @@ st_folium(m, width=1400, height=480, returned_objects=[])
 
 st.markdown("---")
 
-# 5. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO (ANCHO COMPLETO)
+# 6. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO
 st.subheader("📈 Evolución Temporal del Riesgo")
 if not df_filtrado.empty:
     fig = go.Figure()
@@ -88,7 +114,7 @@ if not df_filtrado.empty:
         ))
     fig.update_layout(
         xaxis_title="Fecha de Proyección", yaxis_title="Índice de Riesgo",
-        yaxis=dict(range=[0, 1.05]), height=400, margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified"
+        yaxis=dict(range=[0, 1.05]), height=380, margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified"
     )
     st.plotly_chart(fig, use_container_width=True)
 else:
@@ -96,41 +122,55 @@ else:
 
 st.markdown("---")
 
-# 6. CUADRO INFERIOR: TABLA DE DATOS COLOREADA Y BOTÓN DE DESCARGA
-# Contenedor para alinear título y botón en la misma línea
+# 7. CUADRO INFERIOR: TABLA DE DATOS COLOREADA Y BOTÓN DE DESCARGA
 tit_col, btn_col = st.columns([3, 1])
 
 with tit_col:
     st.subheader("📋 Datos Filtrados y Alertas del Modelo")
 
-# Función para colorear las celdas de la columna 'alerta'
-def color_alertas(val):
-    if val == "CRÍTICO":
-        return 'background-color: #8b0000; color: white; font-weight: bold;'
-    elif val == "ALTO RIESGO":
-        return 'background-color: #ff4d4d; color: white; font-weight: bold;'
-    elif val == "ALERTA AMARILLA":
-        return 'background-color: #ffcc00; color: black; font-weight: bold;'
-    elif val == "MEDIO (DESLAVE)":
-        return 'background-color: #ffa500; color: white; font-weight: bold;'
-    return ''
+# Función avanzada de mapeo de estilos para las celdas del DataFrame
+def estilo_filas_alertas(row):
+    styles = [''] * len(row)
+    val_alerta = row['alerta']
+    
+    # 1. Definir colores para las celdas de Cantón y Provincia basados en la alerta
+    if val_alerta == "CRÍTICO":
+        bg_geo = 'background-color: #FEE2E2; color: #991B1B; font-weight: bold;'  # Rojo suave
+        bg_alerta = 'background-color: #8B0000; color: white; font-weight: bold;' # Rojo oscuro rígido
+    elif val_alerta == "ALTO RIESGO":
+        bg_geo = 'background-color: #FFFEF2; color: #9A3412; font-weight: bold;'  # Naranja suave
+        bg_alerta = 'background-color: #FF4D4D; color: white; font-weight: bold;' # Rojo brillante
+    elif val_alerta == "ALERTA AMARILLA":
+        bg_geo = 'background-color: #FEF9C3; color: #713F12; font-weight: bold;'  # Amarillo suave
+        bg_alerta = 'background-color: #FFCC00; color: black; font-weight: bold;' # Amarillo brillante
+    elif val_alerta == "MEDIO (DESLAVE)":
+        bg_geo = 'background-color: #FFEDD5; color: #C2410C; font-weight: bold;'  # Ocre suave
+        bg_alerta = 'background-color: #FFA500; color: white; font-weight: bold;' # Naranja
+    else:
+        return styles
+
+    # Aplicar los estilos a los índices específicos de las columnas correspondientes
+    # Columnas: ['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']
+    styles[1] = bg_geo     # Columna: canton
+    styles[2] = bg_geo     # Columna: provincia
+    styles[5] = bg_alerta   # Columna: alerta
+    return styles
 
 if not df_filtrado.empty:
     with btn_col:
-        # Botón de exportación GeoJSON colocado estratégicamente al lado del título de la tabla
         features = [{"type": "Feature", "properties": {"canton": r['canton'], "alerta": r['alerta']}, "geometry": {"type": "Point", "coordinates": [r['lon'], r['lat']]}} for _, r in df_filtrado.iterrows()]
         st.download_button(
-            label="💾 Descargar Capa GeoJSON para tu GIS",
+            label="💾 Descargar Capa GeoJSON",
             data=json.dumps({"type": "FeatureCollection", "features": features}, indent=2),
             file_name="alertas_ecuador.geojson", mime="application/geo+json", use_container_width=True
         )
 
-    # Formatear fecha y estructurar tabla
+    # Formatear la estructura del DataFrame para visualización
     df_mostrar = df_filtrado[['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']].copy()
     df_mostrar['fecha'] = df_mostrar['fecha'].astype(str)
     
-    # Aplicar el mapa de estilos a la columna 'alerta'
-    df_estilizado = df_mostrar.style.map(color_alertas, subset=['alerta'])
+    # Aplicar estilos condicionales por fila cruzando métricas
+    df_estilizado = df_mostrar.style.apply(estilo_filas_alertas, axis=1)
     
     st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 else:
