@@ -46,7 +46,7 @@ df_filtrado = df_original[
     (df_original['riesgo'] >= umbral_riesgo)
 ].copy()
 
-# 4. CUADRO PRINCIPAL (SUPERIOR): MAPA OPENSTREETMAP A ANCHO COMPLETO
+# 4. CUADRO PRINCIPAL (SUPERIOR): MAPA OPENSTREETMAP
 st.subheader("📍 Mapa de Alertas Georreferenciadas (OpenStreetMap Engine)")
 m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles="OpenStreetMap")
 
@@ -72,64 +72,67 @@ if not df_filtrado.empty:
             popup=folium.Popup(popup_html, max_width=250)
         ).add_to(m)
 
-# El mapa ahora ocupa todo el ancho de la sección superior
-st_folium(m, width=1400, height=500, returned_objects=[])
+st_folium(m, width=1400, height=480, returned_objects=[])
 
 st.markdown("---")
 
-# 5. CUADRO INFERIOR: GRÁFICA DE SERIES DE TIEMPO Y TABLA COLOREADA
-col_izq, col_der = st.columns(2)
+# 5. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO (ANCHO COMPLETO)
+st.subheader("📈 Evolución Temporal del Riesgo")
+if not df_filtrado.empty:
+    fig = go.Figure()
+    for canton, grupo in df_filtrado.groupby('canton'):
+        grupo_ordenado = grupo.sort_values('fecha')
+        fig.add_trace(go.Scatter(
+            x=grupo_ordenado['fecha'], y=grupo_ordenado['riesgo'],
+            mode='lines+markers', name=canton, line=dict(width=3)
+        ))
+    fig.update_layout(
+        xaxis_title="Fecha de Proyección", yaxis_title="Índice de Riesgo",
+        yaxis=dict(range=[0, 1.05]), height=400, margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Sin datos para generar tendencias.")
 
-with col_izq:
-    st.subheader("📈 Evolución Temporal del Riesgo")
-    if not df_filtrado.empty:
-        fig = go.Figure()
-        for canton, grupo in df_filtrado.groupby('canton'):
-            grupo_ordenado = grupo.sort_values('fecha')
-            fig.add_trace(go.Scatter(
-                x=grupo_ordenado['fecha'], y=grupo_ordenado['riesgo'],
-                mode='lines+markers', name=canton, line=dict(width=3)
-            ))
-        fig.update_layout(
-            xaxis_title="Fecha de Proyección", yaxis_title="Índice de Riesgo",
-            yaxis=dict(range=[0, 1.05]), margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified"
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Sin datos para generar tendencias.")
+st.markdown("---")
 
-with col_der:
+# 6. CUADRO INFERIOR: TABLA DE DATOS COLOREADA Y BOTÓN DE DESCARGA
+# Contenedor para alinear título y botón en la misma línea
+tit_col, btn_col = st.columns([3, 1])
+
+with tit_col:
     st.subheader("📋 Datos Filtrados y Alertas del Modelo")
-    
-    # Función para colorear las celdas de la columna 'alerta' según su métrica
-    def color_alertas(val):
-        if val == "CRÍTICO":
-            return 'background-color: #8b0000; color: white; font-weight: bold;'
-        elif val == "ALTO RIESGO":
-            return 'background-color: #ff4d4d; color: white; font-weight: bold;'
-        elif val == "ALERTA AMARILLA":
-            return 'background-color: #ffcc00; color: black; font-weight: bold;'
-        elif val == "MEDIO (DESLAVE)":
-            return 'background-color: #ffa500; color: white; font-weight: bold;'
-        return ''
 
-    if not df_filtrado.empty:
-        # Formatear fecha a string para una correcta visualización en la tabla estilizada
-        df_mostrar = df_filtrado[['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']].copy()
-        df_mostrar['fecha'] = df_mostrar['fecha'].astype(str)
-        
-        # Aplicar el mapa de estilos únicamente a la columna 'alerta'
-        df_estilizado = df_mostrar.style.map(color_alertas, subset=['alerta'])
-        
-        st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
-        
-        # Botón de exportación GeoJSON
+# Función para colorear las celdas de la columna 'alerta'
+def color_alertas(val):
+    if val == "CRÍTICO":
+        return 'background-color: #8b0000; color: white; font-weight: bold;'
+    elif val == "ALTO RIESGO":
+        return 'background-color: #ff4d4d; color: white; font-weight: bold;'
+    elif val == "ALERTA AMARILLA":
+        return 'background-color: #ffcc00; color: black; font-weight: bold;'
+    elif val == "MEDIO (DESLAVE)":
+        return 'background-color: #ffa500; color: white; font-weight: bold;'
+    return ''
+
+if not df_filtrado.empty:
+    with btn_col:
+        # Botón de exportación GeoJSON colocado estratégicamente al lado del título de la tabla
         features = [{"type": "Feature", "properties": {"canton": r['canton'], "alerta": r['alerta']}, "geometry": {"type": "Point", "coordinates": [r['lon'], r['lat']]}} for _, r in df_filtrado.iterrows()]
         st.download_button(
             label="💾 Descargar Capa GeoJSON para tu GIS",
             data=json.dumps({"type": "FeatureCollection", "features": features}, indent=2),
             file_name="alertas_ecuador.geojson", mime="application/geo+json", use_container_width=True
         )
-    else:
-        st.info("No hay datos que coincidan con los filtros seleccionados.")
+
+    # Formatear fecha y estructurar tabla
+    df_mostrar = df_filtrado[['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']].copy()
+    df_mostrar['fecha'] = df_mostrar['fecha'].astype(str)
+    
+    # Aplicar el mapa de estilos a la columna 'alerta'
+    df_estilizado = df_mostrar.style.map(color_alertas, subset=['alerta'])
+    
+    st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
+else:
+    st.info("No hay datos que coincidan con los filtros seleccionados.")
 
