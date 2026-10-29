@@ -35,7 +35,8 @@ df_filtrado = df_original[(df_original['fecha'] >= fecha_inicio) & (df_original[
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("📍 Mapa de Alertas Georreferenciadas (Leaflet.js)")
-    m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles="CartoDB positron")
+    m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles="OpenStreetMap")
+
     if not df_filtrado.empty:
         df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().reset_index()
         for idx, row in df_mapa_reciente.iterrows():
