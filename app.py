@@ -32,7 +32,7 @@ umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
 df_filtrado = df_original[(df_original['fecha'] >= fecha_inicio) & (df_original['fecha'] <= fecha_fin) & (df_original['riesgo'] >= umbral_riesgo)]
 
-col1, col2 = st.columns()
+col1, col2 = st.columns(2)
 with col1:
     st.subheader("📍 Mapa de Alertas Georreferenciadas (Leaflet.js)")
     m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles="CartoDB positron")
