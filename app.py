@@ -158,7 +158,7 @@ tit_col, btn_col = st.columns()
 with tit_col:
     st.subheader("📋 Datos Filtrados y Alertas del Modelo")
 
-# Función avanzada de mapeo de estilos corregida estructuralmente
+# Función limpia de mapeo estético sin estructuras complejas que generen TabErrors
 def estilo_filas_alertas(row):
     val_alerta = row['alerta']
     
@@ -175,10 +175,8 @@ def estilo_filas_alertas(row):
         bg_geo = 'background-color: #FFEDD5; color: #C2410C; font-weight: bold;'
         bg_alerta = 'background-color: #FFA500; color: white; font-weight: bold;'
     else:
-        bg_geo = ''
-        bg_alerta = ''
+        return ['', '', '', '', '', '']
 
-    # Retorna los estilos para cada columna en el orden exacto del DataFrame
     return ['', bg_geo, bg_geo, '', '', bg_alerta]
 
 if not df_filtrado.empty:
@@ -194,8 +192,9 @@ if not df_filtrado.empty:
     df_mostrar = df_filtrado[['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']].copy()
     df_mostrar['fecha'] = df_mostrar['fecha'].astype(str)
     
-    # Aplicar estilos condicionales por fila alineados con la tupla devuelta
+    # Aplicar estilos condicionales por fila
     df_estilizado = df_mostrar.style.apply(estilo_filas_alertas, axis=1)
     
     st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 else:
+    st.info("No hay datos que coincidan con los filtros seleccionados.")
