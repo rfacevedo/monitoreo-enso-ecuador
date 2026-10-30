@@ -199,4 +199,3 @@ if not df_filtrado.empty:
     
     st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 else:
-
