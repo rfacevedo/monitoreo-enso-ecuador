@@ -5,6 +5,8 @@ from streamlit_folium import st_folium
 import plotly.graph_objects as go
 import datetime
 import json
+import geopandas as gpd
+
 
 # 1. Configuración de página de Streamlit
 st.set_page_config(
