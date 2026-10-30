@@ -153,7 +153,7 @@ else:
 st.markdown("---")
 
 # 7. CUADRO INFERIOR: TABLA DE DATOS COLOREADA Y BOTÓN DE DESCARGA
-tit_col, btn_col = st.columns()
+tit_col, btn_col = st.columns([3, 1])
 
 with tit_col:
     st.subheader("📋 Datos Filtrados y Alertas del Modelo")
