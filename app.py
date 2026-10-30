@@ -158,7 +158,7 @@ tit_col, btn_col = st.columns()
 with tit_col:
     st.subheader("📋 Datos Filtrados y Alertas del Modelo")
 
-# Función avanzada de mapeo de estilos para las celdas del DataFrame
+# Función avanzada de mapeo de estilos para las celdas del DataFrame (REPARADA)
 def estilo_filas_alertas(row):
     styles = [''] * len(row)
     val_alerta = row['alerta']
@@ -168,7 +168,7 @@ def estilo_filas_alertas(row):
         bg_alerta = 'background-color: #8B0000; color: white; font-weight: bold;'
     elif val_alerta == "ALTO RIESGO":
         bg_geo = 'background-color: #FFFEF2; color: #9A3412; font-weight: bold;'
-    	bg_alerta = 'background-color: #FF4D4D; color: white; font-weight: bold;'
+        bg_alerta = 'background-color: #FF4D4D; color: white; font-weight: bold;'
     elif val_alerta == "ALERTA AMARILLA":
         bg_geo = 'background-color: #FEF9C3; color: #713F12; font-weight: bold;'
         bg_alerta = 'background-color: #FFCC00; color: black; font-weight: bold;'
@@ -196,7 +196,7 @@ if not df_filtrado.empty:
     df_mostrar = df_filtrado[['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']].copy()
     df_mostrar['fecha'] = df_mostrar['fecha'].astype(str)
     
-    # Aplicar estilos condicionales
+    # Aplicar estilos condicionales por fila
     df_estilizado = df_mostrar.style.apply(estilo_filas_alertas, axis=1)
     
     st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
