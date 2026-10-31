@@ -7,14 +7,38 @@ import datetime
 import json
 import streamlit.components.v1 as components
 
-# 1. Configuración de página de Streamlit
+# ==========================================
+# 0. FUNCIONES DE SOPORTE (ESTILOS COMPILADOS)
+# ==========================================
+def estilo_filas_alertas(row):
+    """Aplica colores condicionales a las celdas según el nivel de alerta."""
+    val_alerta = row['alerta']
+    if val_alerta == "CRÍTICO":
+        bg_geo = 'background-color: #FEE2E2; color: #991B1B; font-weight: bold;'
+        bg_alerta = 'background-color: #8B0000; color: white; font-weight: bold;'
+    elif val_alerta == "ALTO RIESGO":
+        bg_geo = 'background-color: #FFEDD5; color: #9A3412; font-weight: bold;'
+        bg_alerta = 'background-color: #FF4D4D; color: white; font-weight: bold;'
+    elif val_alerta == "ALERTA AMARILLA":
+        bg_geo = 'background-color: #FEF9C3; color: #713F12; font-weight: bold;'
+        bg_alerta = 'background-color: #FFCC00; color: black; font-weight: bold;'
+    elif val_alerta == "MEDIO (DESLAVE)":
+        bg_geo = 'background-color: #F3F4F6; color: #374151; font-weight: bold;'
+        bg_alerta = 'background-color: #FFA500; color: white; font-weight: bold;'
+    else: 
+        return ['', '', '', '', '', '']
+    return ['', bg_geo, bg_geo, '', '', bg_alerta]
+
+# ==========================================
+# 1. CONFIGURACIÓN DE PÁGINA
+# ==========================================
 st.set_page_config(
     page_title="Monitoreo ENSO - Gestión de Riesgos Ecuador",
     layout="wide",
     page_icon="⛈️"
 )
 
-# 2. Inyección de CSS Avanzado
+# Inyección de CSS Avanzado
 st.markdown(
     """
     <style>
@@ -46,7 +70,9 @@ st.markdown(
 st.markdown('<p class="titulo-mediano">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>', unsafe_allow_html=True)
 st.markdown("### Integración de Métricas NOAA, Copernicus, CIIFEN e INOCAR para el Litoral Ecuatoriano")
 
-# 3. Base de Datos Temporal de Prueba
+# ==========================================
+# 2. BASE DE DATOS DE PRUEBA
+# ==========================================
 data_points = [
     {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 210.5, "mar_cm": 35.0, "riesgo": 0.65, "alerta": "ALERTA AMARILLA", "lat": -1.80, "lon": -79.53, "fecha": datetime.date(2026, 11, 15)},
     {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 250.0, "mar_cm": 45.0, "riesgo": 0.95, "alerta": "CRÍTICO", "lat": -2.20, "lon": -79.89, "fecha": datetime.date(2026, 11, 15)},
@@ -63,7 +89,9 @@ data_points = [
 
 df_original = pd.DataFrame(data_points)
 
-# 4. Barra Lateral: Filtros, Dimensión y Mapas Base
+# ==========================================
+# 3. INTERFAZ LATERAL (FILTROS)
+# ==========================================
 st.sidebar.header("⚙️ Filtros del Modelo")
 fecha_inicio = st.sidebar.date_input("Fecha Inicial", datetime.date(2026, 11, 1))
 fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2, 1))
@@ -74,22 +102,22 @@ st.sidebar.header("🗺️ Capas de Mapa Base")
 mapa_seleccionado = st.sidebar.selectbox("Selecciona el Mapa Base:", ["Normal (OSM)", "Imagen (Esri Satelital)"])
 dimension = st.sidebar.radio("Dimensión Espacial:", ["2D (Plano)", "3D (Relieve Globo)"])
 
-# Aplicar filtros espacio-temporales
+# Filtrado espacio-temporal
 df_filtrado = df_original[
     (df_original['fecha'] >= fecha_inicio) & 
     (df_original['fecha'] <= fecha_fin) & 
     (df_original['riesgo'] >= umbral_riesgo)
 ].copy()
 
-# Validación preventiva de datos vacíos
 if df_filtrado.empty:
-    st.info("No hay registros climáticos o alertas que coincidan con los filtros seleccionados en la barra lateral.")
+    st.info("No hay registros climáticos o alertas que coincidan con los filtros seleccionados.")
     st.stop()
 
-# Procesar agrupación espacial
 df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().reset_index()
 
-# 5. RENDERIZADO DEL MAPA PRINCIPAL (SUPERIOR)
+# ==========================================
+# 4. VISOR GEOGRÁFICO PRINCIPAL
+# ==========================================
 st.subheader(f"📍 Visor Geográfico Interactivo - Modo {dimension}")
 
 if dimension == "2D (Plano)":
@@ -168,42 +196,3 @@ else:
                 navigationHelpButton: false,
                 sceneModePicker: false
             }});
-            viewer.scene.globe.enableLighting = true;
-            viewer.camera.setView({{
-                destination: Cesium.Cartesian3.fromDegrees(-79.80, -1.80, 550000),
-                orientation: {{ heading: Cesium.Math.toRadians(0.0), pitch: Cesium.Math.toRadians(-65.0), roll: 0.0 }}
-            }});
-            {js_puntos}
-        </script>
-    </body>
-    </html>
-    """
-    components.html(cesium_html, height=480, scrolling=False)
-
-st.markdown("---")
-
-# 6. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO
-st.subheader("📈 Evolución Temporal del Riesgo")
-fig = go.Figure()
-for canton, grupo in df_filtrado.groupby('canton'):
-    grupo_ordenado = grupo.sort_values('fecha')
-    fig.add_trace(go.Scatter(
-        x=grupo_ordenado['fecha'], y=grupo_ordenado['riesgo'], 
-        mode='lines+markers', name=canton, line=dict(width=3)
-    ))
-fig.update_layout(
-    xaxis_title="Fecha de Proyección", yaxis_title="Índice de Riesgo",
-    yaxis=dict(range=[0, 1.05]), height=380, margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified",
-    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
-)
-st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("---")
-
-# 7. CUADRO INFERIOR: TABLA COLOREADA Y DESCARGA (CORREGIDA INDENTACIÓN)
-tit_col, btn_col = st.columns(2)
-
-with tit_col: 
-    st.subheader("📋 Datos Filtrados y Alertas del Modelo")
-
-def estilo_filas_alertas(row):
