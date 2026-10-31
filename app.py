@@ -186,7 +186,7 @@ else:
 
 st.markdown("---")
 
-# 6. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO (SINTAXIS REPARADA)
+# 6. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO
 st.subheader("📈 Evolución Temporal del Riesgo")
 if not df_filtrado.empty:
     fig = go.Figure()
