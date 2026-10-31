@@ -171,8 +171,7 @@ else:
                 pixelOffset: new Cesium.Cartesian2(0, -15)
             }}
         }});
-        """
-
+      
     # Texto HTML plano (Sin la letra 'f' inicial) para evitar conflictos con las llaves de JavaScript/CSS
     cesium_html_template = """
     <!DOCTYPE html>
