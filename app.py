@@ -113,13 +113,11 @@ if dimension == "2D (Plano)":
 
 else:
     # --- MÓDULO 3D CESIUM.JS ---
-    # Configurar proveedor de imágenes para el globo 3D
     if mapa_seleccionado == "Imagen (Esri Satelital)":
         cesium_imagery = "new Cesium.UrlTemplateImageryProvider({ url: 'https://arcgisonline.com{z}/{y}/{x}' })"
     else:
         cesium_imagery = "new Cesium.OpenStreetMapImageryProvider({ url: 'https://openstreetmap.org' })"
         
-    # Construir los marcadores como JavaScript para inyectar en Cesium
     js_puntos = ""
     for idx, row in df_mapa_reciente.iterrows():
         color_hex = "#8B0000" if row['alerta'] == "CRÍTICO" else ("#FF4D4D" if row['alerta'] == "ALTO RIESGO" else "#FFA500")
@@ -146,7 +144,6 @@ else:
         }});
         """
 
-    # Código HTML autónomo con librerías CDN de Cesium.js y terreno topográfico global activo
     cesium_html = f"""
     <!DOCTYPE html>
     <html lang="es">
@@ -161,7 +158,6 @@ else:
     <body>
         <div id="cesiumContainer"></div>
         <script>
-            // Inicializar el globo con relieve y capa seleccionada
             const viewer = new Cesium.Viewer('cesiumContainer', {{
                 terrainProvider: Cesium.createWorldTerrain(),
                 imageryProvider: {cesium_imagery},
@@ -172,10 +168,7 @@ else:
                 sceneModePicker: false
             }});
             
-            // Forzar visualización de terreno con sombreado
             viewer.scene.globe.enableLighting = true;
-
-            // Enfocar la cámara sobre el perfil costero de Ecuador
             viewer.camera.setView({{
                 destination: Cesium.Cartesian3.fromDegrees(-79.80, -1.80, 550000),
                 orientation: {{
@@ -184,8 +177,6 @@ else:
                     roll: 0.0
                 }}
             }});
-
-            // Inyectar entidades georreferenciadas
             {js_puntos}
         </script>
     </body>
@@ -195,12 +186,28 @@ else:
 
 st.markdown("---")
 
-# 6. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO
+# 6. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO (SINTAXIS REPARADA)
 st.subheader("📈 Evolución Temporal del Riesgo")
 if not df_filtrado.empty:
     fig = go.Figure()
     for canton, grupo in df_filtrado.groupby('canton'):
         grupo_ordenado = grupo.sort_values('fecha')
-        fig.add_trace(go.Scatter(x=grupo_ordenado['fecha'], y=grupo_ordenado['riesgo'], mode='lines+markers', name=canton, line=dict(width=3)))
+        fig.add_trace(go.Scatter(
+            x=grupo_ordenado['fecha'], 
+            y=grupo_ordenado['riesgo'], 
+            mode='lines+markers', 
+            name=canton, 
+            line=dict(width=3)
+        ))
     fig.update_layout(
-
+        xaxis_title="Fecha de Proyección", 
+        yaxis_title="Índice de Riesgo",
+        yaxis=dict(range=[0, 1.05]), 
+        height=380, 
+        margin=dict(l=20, r=20, t=10, b=20), 
+        hovermode="x unified",
+        paper_bgcolor='rgba(0,0,0,0)', 
+        plot_bgcolor='rgba(0,0,0,0)'
+    )
+    st.plotly_chart(fig, use_container_width=True)
+else:
