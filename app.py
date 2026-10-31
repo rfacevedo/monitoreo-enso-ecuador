@@ -5,7 +5,7 @@ from streamlit_folium import st_folium
 import plotly.graph_objects as go
 import datetime
 import json
-
+import streamlit.components.v1 as components
 
 # 1. Configuración de página de Streamlit
 st.set_page_config(
@@ -14,16 +14,13 @@ st.set_page_config(
     page_icon="⛈️"
 )
 
-# 2. Inyección de CSS Avanzado (Fondo de página, Filtros en azul oscuro y textos de fechas en negro)
+# 2. Inyección de CSS Avanzado
 st.markdown(
     """
     <style>
-    /* Fondo de la página principal en plomo claro */
     .stApp {
         background-color: #E5E7EB !important;
     }
-    
-    /* Cambiar el fondo de la barra de filtros a azul oscuro */
     [data-testid="stSidebar"] {
         background-color: #0A192F !important;
         color: #FFFFFF !important;
@@ -31,14 +28,10 @@ st.markdown(
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] span {
         color: #FFFFFF !important;
     }
-    
-    /* Forzar que los textos y números dentro de los inputs de fechas sean negros */
     [data-testid="stSidebar"] input {
         color: #000000 !important;
         font-weight: bold !important;
     }
-    
-    /* Modificar el título principal a un tamaño mediano */
     .titulo-mediano {
         font-size: 28px !important;
         font-weight: bold !important;
@@ -50,7 +43,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Renderizar el título principal
 st.markdown('<p class="titulo-mediano">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>', unsafe_allow_html=True)
 st.markdown("### Integración de Métricas NOAA, Copernicus, CIIFEN e INOCAR para el Litoral Ecuatoriano")
 
@@ -71,64 +63,135 @@ data_points = [
 
 df_original = pd.DataFrame(data_points)
 
-# 4. Barra Lateral: Filtros y Selección de Mapa Base
+# 4. Barra Lateral: Filtros, Dimensión y Mapas Base
 st.sidebar.header("⚙️ Filtros del Modelo")
 fecha_inicio = st.sidebar.date_input("Fecha Inicial", datetime.date(2026, 11, 1))
 fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2, 1))
 umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
 st.sidebar.markdown("---")
-st.sidebar.header("🗺️ Capas de Mapa Base")
-mapa_seleccionado = st.sidebar.selectbox(
-    "Selecciona el Mapa Base:",
-    ["Normal (OSM)", "Imagen (Satelital)", "Topológico"]
-)
+st.sidebar.header("🎛️ Configuración de Visualización")
+dimension = st.sidebar.radio("Dimensión Espacial:", ["2D (Plano)", "3D (Relieve Globo)"])
+mapa_seleccionado = st.sidebar.selectbox("Capa de Mapa Base:", ["Normal (OSM)", "Imagen (Esri Satelital)"])
 
-# Configuración dinámica del servidor de teselas (Tiles) según la selección
-if mapa_seleccionado == "Imagen (Satelital)":
-    map_tiles = "https://arcgisonline.com{z}/{y}/{x}"
-    map_attr = "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
-elif mapa_seleccionado == "Topológico":
-    map_tiles = "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
-    map_attr = "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)"
-else:
-    map_tiles = "OpenStreetMap"
-    map_attr = "OpenStreetMap contributors"
-
-# Aplicar filtros espacio-temporales
+# Filtrado de datos
 df_filtrado = df_original[
     (df_original['fecha'] >= fecha_inicio) & 
     (df_original['fecha'] <= fecha_fin) & 
     (df_original['riesgo'] >= umbral_riesgo)
 ].copy()
 
-# 5. CUADRO PRINCIPAL (SUPERIOR): MAPA DE ALERTAS DINÁMICO
-st.subheader("📍 Mapa de Alertas Georreferenciadas")
-m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles=map_tiles, attr=map_attr)
-
+# Agrupar puntos recientes para renderizar en los mapas
+df_mapa_reciente = pd.DataFrame()
 if not df_filtrado.empty:
     df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().reset_index()
+
+# 5. RENDERIZADO DEL MAPA PRINCIPAL (SUPERIOR)
+st.subheader(f"📍 Visor Geográfico Interactivo - Modo {dimension}")
+
+if dimension == "2D (Plano)":
+    # --- MÓDULO 2D LEAFLET ---
+    if mapa_seleccionado == "Imagen (Esri Satelital)":
+        map_tiles = "https://arcgisonline.com{z}/{y}/{x}"
+        map_attr = "Esri"
+    else:
+        map_tiles = "OpenStreetMap"
+        map_attr = "OpenStreetMap contributors"
+        
+    m = folium.Map(location=[-1.80, -79.80], zoom_start=7, tiles=map_tiles, attr=map_attr)
+    
     for idx, row in df_mapa_reciente.iterrows():
         color_alerta = "darkred" if row['alerta'] == "CRÍTICO" else ("red" if row['alerta'] == "ALTO RIESGO" else "orange")
-        popup_html = f"""
-        <div style='font-family: Arial; width: 180px;'>
-            <h5 style='margin:0 0 5px 0;'>{row['canton']}</h5>
-            <b>Riesgo:</b> {int(row['riesgo']*100)}%<br>
-            <b>Lluvia Anómala:</b> +{row['lluvia_mm']} mm<br>
-            <b>Nivel del Mar:</b> +{row['mar_cm']} cm<br>
-        </div>
-        """
+        popup_html = f"<div style='font-family:Arial;width:150px;'><b>{row['canton']}</b><br>Riesgo: {int(row['riesgo']*100)}%<br>Lluvia: +{row['lluvia_mm']}mm</div>"
         folium.CircleMarker(
-            location=[row['lat'], row['lon']],
-            radius=13,
-            color=color_alerta,
-            fill=True,
-            fill_color=color_alerta,
-            fill_opacity=0.7,
+            location=[row['lat'], row['lon']], radius=13, color=color_alerta,
+            fill=True, fill_color=color_alerta, fill_opacity=0.7,
             popup=folium.Popup(popup_html, max_width=250)
         ).add_to(m)
+        
+    st_folium(m, width=1400, height=480, returned_objects=[])
 
-st_folium(m, width=1400, height=480, returned_objects=[])
+else:
+    # --- MÓDULO 3D CESIUM.JS ---
+    # Configurar proveedor de imágenes para el globo 3D
+    if mapa_seleccionado == "Imagen (Esri Satelital)":
+        cesium_imagery = "new Cesium.UrlTemplateImageryProvider({ url: 'https://arcgisonline.com{z}/{y}/{x}' })"
+    else:
+        cesium_imagery = "new Cesium.OpenStreetMapImageryProvider({ url: 'https://openstreetmap.org' })"
+        
+    # Construir los marcadores como JavaScript para inyectar en Cesium
+    js_puntos = ""
+    for idx, row in df_mapa_reciente.iterrows():
+        color_hex = "#8B0000" if row['alerta'] == "CRÍTICO" else ("#FF4D4D" if row['alerta'] == "ALTO RIESGO" else "#FFA500")
+        js_puntos += f"""
+        viewer.entities.add({{
+            position: Cesium.Cartesian3.fromDegrees({row['lon']}, {row['lat']}, 200),
+            point: {{
+                pixelSize: 18,
+                color: Cesium.Color.fromCssColorString('{color_hex}'),
+                outlineColor: Cesium.Color.WHITE,
+                outlineWidth: 2,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+            }},
+            label: {{
+                text: '{row['canton']} ({int(row['riesgo']*100)}%)',
+                font: '14px sans-serif',
+                fillColor: Cesium.Color.WHITE,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 2,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -15)
+            }}
+        }});
+        """
+
+    # Código HTML autónomo con librerías CDN de Cesium.js y terreno topográfico global activo
+    cesium_html = f"""
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+        <meta charset="utf-8">
+        <script src="https://cesium.com"></script>
+        <link href="https://cesium.com" rel="stylesheet">
+        <style>
+            html, body, #cesiumContainer {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }}
+        </style>
+    </head>
+    <body>
+        <div id="cesiumContainer"></div>
+        <script>
+            // Inicializar el globo con relieve y capa seleccionada
+            const viewer = new Cesium.Viewer('cesiumContainer', {{
+                terrainProvider: Cesium.createWorldTerrain(),
+                imageryProvider: {cesium_imagery},
+                baseLayerPicker: false,
+                geocoder: false,
+                homeButton: false,
+                navigationHelpButton: false,
+                sceneModePicker: false
+            }});
+            
+            // Forzar visualización de terreno con sombreado
+            viewer.scene.globe.enableLighting = true;
+
+            // Enfocar la cámara sobre el perfil costero de Ecuador
+            viewer.camera.setView({{
+                destination: Cesium.Cartesian3.fromDegrees(-79.80, -1.80, 550000),
+                orientation: {{
+                    heading: Cesium.Math.toRadians(0.0),
+                    pitch: Cesium.Math.toRadians(-65.0),
+                    roll: 0.0
+                }}
+            }});
+
+            // Inyectar entidades georreferenciadas
+            {js_puntos}
+        </script>
+    </body>
+    </html>
+    """
+    components.html(cesium_html, height=480, scrolling=False)
 
 st.markdown("---")
 
@@ -138,64 +201,6 @@ if not df_filtrado.empty:
     fig = go.Figure()
     for canton, grupo in df_filtrado.groupby('canton'):
         grupo_ordenado = grupo.sort_values('fecha')
-        fig.add_trace(go.Scatter(
-            x=grupo_ordenado['fecha'], y=grupo_ordenado['riesgo'],
-            mode='lines+markers', name=canton, line=dict(width=3)
-        ))
+        fig.add_trace(go.Scatter(x=grupo_ordenado['fecha'], y=grupo_ordenado['riesgo'], mode='lines+markers', name=canton, line=dict(width=3)))
     fig.update_layout(
-        xaxis_title="Fecha de Proyección", yaxis_title="Índice de Riesgo",
-        yaxis=dict(range=[0, 1.05]), height=380, margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified",
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("Sin datos para generar tendencias.")
 
-st.markdown("---")
-
-# 7. CUADRO INFERIOR: TABLA DE DATOS COLOREADA Y BOTÓN DE DESCARGA
-tit_col, btn_col = st.columns([3, 1])
-
-with tit_col:
-    st.subheader("📋 Datos Filtrados y Alertas del Modelo")
-
-# Función limpia de mapeo estético sin estructuras complejas que generen TabErrors
-def estilo_filas_alertas(row):
-    val_alerta = row['alerta']
-    
-    if val_alerta == "CRÍTICO":
-        bg_geo = 'background-color: #FEE2E2; color: #991B1B; font-weight: bold;'
-        bg_alerta = 'background-color: #8B0000; color: white; font-weight: bold;'
-    elif val_alerta == "ALTO RIESGO":
-        bg_geo = 'background-color: #FFFEF2; color: #9A3412; font-weight: bold;'
-        bg_alerta = 'background-color: #FF4D4D; color: white; font-weight: bold;'
-    elif val_alerta == "ALERTA AMARILLA":
-        bg_geo = 'background-color: #FEF9C3; color: #713F12; font-weight: bold;'
-        bg_alerta = 'background-color: #FFCC00; color: black; font-weight: bold;'
-    elif val_alerta == "MEDIO (DESLAVE)":
-        bg_geo = 'background-color: #FFEDD5; color: #C2410C; font-weight: bold;'
-        bg_alerta = 'background-color: #FFA500; color: white; font-weight: bold;'
-    else:
-        return ['', '', '', '', '', '']
-
-    return ['', bg_geo, bg_geo, '', '', bg_alerta]
-
-if not df_filtrado.empty:
-    with btn_col:
-        features = [{"type": "Feature", "properties": {"canton": r['canton'], "alerta": r['alerta']}, "geometry": {"type": "Point", "coordinates": [r['lon'], r['lat']]}} for _, r in df_filtrado.iterrows()]
-        st.download_button(
-            label="💾 Descargar Capa GeoJSON",
-            data=json.dumps({"type": "FeatureCollection", "features": features}, indent=2),
-            file_name="alertas_ecuador.geojson", mime="application/geo+json", use_container_width=True
-        )
-
-    # Formatear la estructura del DataFrame para visualización
-    df_mostrar = df_filtrado[['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']].copy()
-    df_mostrar['fecha'] = df_mostrar['fecha'].astype(str)
-    
-    # Aplicar estilos condicionales por fila
-    df_estilizado = df_mostrar.style.apply(estilo_filas_alertas, axis=1)
-    
-    st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
-else:
-    st.info("No hay datos que coincidan con los filtros seleccionados.")
