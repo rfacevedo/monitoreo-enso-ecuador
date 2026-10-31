@@ -74,19 +74,19 @@ st.sidebar.header("🗺️ Capas de Mapa Base")
 mapa_seleccionado = st.sidebar.selectbox("Selecciona el Mapa Base:", ["Normal (OSM)", "Imagen (Esri Satelital)"])
 dimension = st.sidebar.radio("Dimensión Espacial:", ["2D (Plano)", "3D (Relieve Globo)"])
 
-# Aplicar filtros espacio-temporales de inmediato
+# Aplicar filtros espacio-temporales
 df_filtrado = df_original[
     (df_original['fecha'] >= fecha_inicio) & 
     (df_original['fecha'] <= fecha_fin) & 
     (df_original['riesgo'] >= umbral_riesgo)
 ].copy()
 
-# VALIDACIÓN PREVENTIVA: Si no hay datos, muestra aviso y detiene ejecuciones hijas de forma limpia
+# Validación preventiva de datos vacíos
 if df_filtrado.empty:
     st.info("No hay registros climáticos o alertas que coincidan con los filtros seleccionados en la barra lateral.")
     st.stop()
 
-# Procesar agrupación de datos espaciales una vez validados que existen registros
+# Procesar agrupación espacial
 df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().reset_index()
 
 # 5. RENDERIZADO DEL MAPA PRINCIPAL (SUPERIOR)
@@ -200,6 +200,10 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
 
-# 7. CUADRO INFERIOR: TABLA COLOREADA Y DESCARGA
+# 7. CUADRO INFERIOR: TABLA COLOREADA Y DESCARGA (CORREGIDA INDENTACIÓN)
 tit_col, btn_col = st.columns(2)
+
 with tit_col: 
+    st.subheader("📋 Datos Filtrados y Alertas del Modelo")
+
+def estilo_filas_alertas(row):
