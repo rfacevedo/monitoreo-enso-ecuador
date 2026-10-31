@@ -70,27 +70,29 @@ fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2,
 umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
 st.sidebar.markdown("---")
-st.sidebar.header("🎛️ Configuración de Visualización")
+st.sidebar.header("🗺️ Capas de Mapa Base")
+mapa_seleccionado = st.sidebar.selectbox("Selecciona el Mapa Base:", ["Normal (OSM)", "Imagen (Esri Satelital)"])
 dimension = st.sidebar.radio("Dimensión Espacial:", ["2D (Plano)", "3D (Relieve Globo)"])
-mapa_seleccionado = st.sidebar.selectbox("Capa de Mapa Base:", ["Normal (OSM)", "Imagen (Esri Satelital)"])
 
-# Filtrado de datos
+# Aplicar filtros espacio-temporales de inmediato
 df_filtrado = df_original[
     (df_original['fecha'] >= fecha_inicio) & 
     (df_original['fecha'] <= fecha_fin) & 
     (df_original['riesgo'] >= umbral_riesgo)
 ].copy()
 
-# Agrupar puntos recientes para renderizar en los mapas
-df_mapa_reciente = pd.DataFrame()
-if not df_filtrado.empty:
-    df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().reset_index()
+# VALIDACIÓN PREVENTIVA: Si no hay datos, muestra aviso y detiene ejecuciones hijas de forma limpia
+if df_filtrado.empty:
+    st.info("No hay registros climáticos o alertas que coincidan con los filtros seleccionados en la barra lateral.")
+    st.stop()
+
+# Procesar agrupación de datos espaciales una vez validados que existen registros
+df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().reset_index()
 
 # 5. RENDERIZADO DEL MAPA PRINCIPAL (SUPERIOR)
 st.subheader(f"📍 Visor Geográfico Interactivo - Modo {dimension}")
 
 if dimension == "2D (Plano)":
-    # --- MÓDULO 2D LEAFLET ---
     if mapa_seleccionado == "Imagen (Esri Satelital)":
         map_tiles = "https://arcgisonline.com{z}/{y}/{x}"
         map_attr = "Esri"
@@ -112,7 +114,6 @@ if dimension == "2D (Plano)":
     st_folium(m, width=1400, height=480, returned_objects=[])
 
 else:
-    # --- MÓDULO 3D CESIUM.JS ---
     if mapa_seleccionado == "Imagen (Esri Satelital)":
         cesium_imagery = "new Cesium.UrlTemplateImageryProvider({ url: 'https://arcgisonline.com{z}/{y}/{x}' })"
     else:
@@ -167,15 +168,10 @@ else:
                 navigationHelpButton: false,
                 sceneModePicker: false
             }});
-            
             viewer.scene.globe.enableLighting = true;
             viewer.camera.setView({{
                 destination: Cesium.Cartesian3.fromDegrees(-79.80, -1.80, 550000),
-                orientation: {{
-                    heading: Cesium.Math.toRadians(0.0),
-                    pitch: Cesium.Math.toRadians(-65.0),
-                    roll: 0.0
-                }}
+                orientation: {{ heading: Cesium.Math.toRadians(0.0), pitch: Cesium.Math.toRadians(-65.0), roll: 0.0 }}
             }});
             {js_puntos}
         </script>
@@ -188,26 +184,22 @@ st.markdown("---")
 
 # 6. CUADRO INTERMEDIO: GRÁFICA DE SERIES DE TIEMPO
 st.subheader("📈 Evolución Temporal del Riesgo")
-if not df_filtrado.empty:
-    fig = go.Figure()
-    for canton, grupo in df_filtrado.groupby('canton'):
-        grupo_ordenado = grupo.sort_values('fecha')
-        fig.add_trace(go.Scatter(
-            x=grupo_ordenado['fecha'], 
-            y=grupo_ordenado['riesgo'], 
-            mode='lines+markers', 
-            name=canton, 
-            line=dict(width=3)
-        ))
-    fig.update_layout(
-        xaxis_title="Fecha de Proyección", 
-        yaxis_title="Índice de Riesgo",
-        yaxis=dict(range=[0, 1.05]), 
-        height=380, 
-        margin=dict(l=20, r=20, t=10, b=20), 
-        hovermode="x unified",
-        paper_bgcolor='rgba(0,0,0,0)', 
-        plot_bgcolor='rgba(0,0,0,0)'
-    )
-    st.plotly_chart(fig, use_container_width=True)
-else:
+fig = go.Figure()
+for canton, grupo in df_filtrado.groupby('canton'):
+    grupo_ordenado = grupo.sort_values('fecha')
+    fig.add_trace(go.Scatter(
+        x=grupo_ordenado['fecha'], y=grupo_ordenado['riesgo'], 
+        mode='lines+markers', name=canton, line=dict(width=3)
+    ))
+fig.update_layout(
+    xaxis_title="Fecha de Proyección", yaxis_title="Índice de Riesgo",
+    yaxis=dict(range=[0, 1.05]), height=380, margin=dict(l=20, r=20, t=10, b=20), hovermode="x unified",
+    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)'
+)
+st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+# 7. CUADRO INFERIOR: TABLA COLOREADA Y DESCARGA
+tit_col, btn_col = st.columns(2)
+with tit_col: 
