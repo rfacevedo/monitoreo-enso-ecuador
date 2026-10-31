@@ -173,7 +173,8 @@ else:
         }});
         """
 
-    cesium_html = f"""
+    # Texto HTML plano (Sin la letra 'f' inicial) para evitar conflictos con las llaves de JavaScript/CSS
+    cesium_html_template = """
     <!DOCTYPE html>
     <html lang="es">
     <head>
@@ -181,18 +182,16 @@ else:
         <script src="https://cesium.com"></script>
         <link href="https://cesium.com" rel="stylesheet">
         <style>
-            html, body, #cesiumContainer {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }}
+            html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
         </style>
     </head>
     <body>
         <div id="cesiumContainer"></div>
         <script>
-            const viewer = new Cesium.Viewer('cesiumContainer', {{
+            const viewer = new Cesium.Viewer('cesiumContainer', {
                 terrainProvider: Cesium.createWorldTerrain(),
-                imageryProvider: {cesium_imagery},
+                imageryProvider: __IMAGERY_PROVIDER__,
                 baseLayerPicker: false,
                 geocoder: false,
                 homeButton: false,
-                navigationHelpButton: false,
-                sceneModePicker: false
-            }});
+
