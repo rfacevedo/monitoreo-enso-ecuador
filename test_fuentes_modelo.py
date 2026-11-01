@@ -115,6 +115,26 @@ class PruebasAlmacen(unittest.TestCase):
         self.assertEqual([round(e["riesgo_max"], 2) for e in evo], [0.4, 0.6])
         self.assertEqual(almacen.resumen()["fotos_riesgo"], 2)
 
+    def test_asegurar_series_descarga_solo_si_el_almacen_esta_vacio(self):
+        oni = "SEAS YR TOTAL ANOM\n  JAS 2026  29.12   2.16\n"
+        nino = " 21OCT2026     26.3 5.2     29.4 4.3     30.1 3.4     29.8 1.1\n"
+        pedidos = []
+
+        class R:
+            def __init__(self, texto):
+                self.text = texto
+
+        original = fd._get
+        try:
+            fd._get = lambda url, **kw: pedidos.append(url) or R(oni if url == fd.URL_ONI else nino)
+            fd.asegurar_series_enso()
+            self.assertEqual(len(pedidos), 2)
+            self.assertEqual(almacen.resumen()["oni"], 1)
+            fd.asegurar_series_enso()                       # ya hay series: no vuelve a descargar
+            self.assertEqual(len(pedidos), 2)
+        finally:
+            fd._get = original
+
     def test_respaldo_desde_sqlite_si_se_pierde_la_memoria(self):
         fd.con_respaldo("erfen_prueba", lambda: {"informe": "011-2026"})
         fd._ULTIMO_BUENO.clear()                                       # reinicio del proceso

@@ -148,6 +148,15 @@ def parsear_nino_serie(texto):
     return filas
 
 
+def asegurar_series_enso():
+    """Si el almacén no tiene las series completas del ONI y del Niño (p. ej. tras reiniciar el servidor, o si los
+    datos vienen de una caché anterior), las descarga y las guarda. Son dos archivos de texto pequeños."""
+    estado = almacen.resumen()
+    if estado["oni"] == 0 or estado["nino_semanal"] == 0:
+        almacen.guardar_series_enso(parsear_oni_serie(_get(URL_ONI).text),
+                                    parsear_nino_serie(_get(URL_NINO_SEMANAL).text))
+
+
 def obtener_noaa_enso():
     texto_oni, texto_nino = _get(URL_ONI).text, _get(URL_NINO_SEMANAL).text
     oni, semanal = parsear_oni(texto_oni), parsear_nino_semanal(texto_nino)

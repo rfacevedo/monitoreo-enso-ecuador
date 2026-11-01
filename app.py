@@ -1243,6 +1243,7 @@ MES_CENTRAL = {"DJF": 1, "JFM": 2, "FMA": 3, "MAM": 4, "AMJ": 5, "MJJ": 6, "JJA"
 
 with st.expander("📈 Histórico del ENSO y evolución del riesgo (almacén SQLite)"):
     try:
+        fuentes_datos.asegurar_series_enso()      # si el almacén está vacío, descarga las series completas
         oni_hist = pd.DataFrame(almacen.leer_oni(1950))
         nino_hist = pd.DataFrame(almacen.leer_nino_semanal("1981-01-01"))
         evolucion = pd.DataFrame(almacen.leer_evolucion_riesgo())
