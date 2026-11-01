@@ -46,6 +46,22 @@ def estilo_filas_alertas(row):
     return ['', bg_geo, bg_geo, '', '', bg_alerta]
 
 
+def sumar_un_mes(fecha):
+    """Devuelve la misma fecha un mes después (ajusta el día si el mes siguiente es más corto)."""
+    anio = fecha.year + fecha.month // 12
+    mes = fecha.month % 12 + 1
+    dia = min(fecha.day, calendar.monthrange(anio, mes)[1])
+    return datetime.date(anio, mes, dia)
+
+
+def fecha_actual_ecuador():
+    """Fecha de hoy en hora de Ecuador (el servidor de Streamlit Cloud trabaja en UTC)."""
+    try:
+        return datetime.datetime.now(ZoneInfo("America/Guayaquil")).date()
+    except Exception:
+        return datetime.date.today()
+
+
 # ==========================================
 # 1. VISOR CESIUM (2D / 3D)
 # ==========================================
@@ -982,30 +998,37 @@ st.markdown(
 # ==========================================
 # 3. BASE DE DATOS DE PRUEBA
 # ==========================================
+# Los datos de prueba se corren solos con la fecha actual (hoy + 14, + 44 y + 75 días), de modo que
+# siempre haya registros de ejemplo dentro de la ventana de fechas. Reemplazar por datos reales.
+_HOY = fecha_actual_ecuador()
+FECHA_1 = _HOY + datetime.timedelta(days=14)
+FECHA_2 = _HOY + datetime.timedelta(days=44)
+FECHA_3 = _HOY + datetime.timedelta(days=75)
+
 data_points = [
-    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 210.5, "mar_cm": 35.0, "riesgo": 0.65, "alerta": "ALERTA AMARILLA", "lat": -1.80, "lon": -79.53, "fecha": datetime.date(2026, 11, 15)},
-    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 250.0, "mar_cm": 45.0, "riesgo": 0.95, "alerta": "CRÍTICO", "lat": -2.20, "lon": -79.89, "fecha": datetime.date(2026, 11, 15)},
-    {"canton": "Chone", "provincia": "Manabí", "elevacion": 15.0, "lluvia_mm": 190.2, "mar_cm": 0.0, "riesgo": 0.60, "alerta": "ALERTA AMARILLA", "lat": -0.69, "lon": -80.09, "fecha": datetime.date(2026, 11, 15)},
-    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 320.0, "mar_cm": 48.0, "riesgo": 0.92, "alerta": "CRÍTICO", "lat": -1.80, "lon": -79.53, "fecha": datetime.date(2026, 12, 15)},
-    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 380.0, "mar_cm": 52.0, "riesgo": 0.98, "alerta": "CRÍTICO", "lat": -2.20, "lon": -79.89, "fecha": datetime.date(2026, 12, 15)},
-    {"canton": "Chone", "provincia": "Manabí", "elevacion": 15.0, "lluvia_mm": 310.2, "mar_cm": 0.0, "riesgo": 0.85, "alerta": "ALTO RIESGO", "lat": -0.69, "lon": -80.09, "fecha": datetime.date(2026, 12, 15)},
-    {"canton": "Machala", "provincia": "El Oro", "elevacion": 3.0, "lluvia_mm": 220.4, "mar_cm": 46.0, "riesgo": 0.82, "alerta": "ALTO RIESGO", "lat": -3.26, "lon": -79.96, "fecha": datetime.date(2026, 12, 15)},
-    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 280.0, "mar_cm": 42.0, "riesgo": 0.85, "alerta": "ALTO RIESGO", "lat": -1.80, "lon": -79.53, "fecha": datetime.date(2027, 1, 15)},
-    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 290.0, "mar_cm": 40.0, "riesgo": 0.88, "alerta": "ALTO RIESGO", "lat": -2.20, "lon": -79.89, "fecha": datetime.date(2027, 1, 15)},
-    {"canton": "Bucay", "provincia": "Guayas", "elevacion": 320.0, "lluvia_mm": 350.0, "mar_cm": 0.0, "riesgo": 0.55, "alerta": "MEDIO (DESLAVE)", "lat": -2.20, "lon": -79.13, "fecha": datetime.date(2027, 1, 15)},
-    {"canton": "Machala", "provincia": "El Oro", "elevacion": 3.0, "lluvia_mm": 180.4, "mar_cm": 40.0, "riesgo": 0.75, "alerta": "ALTO RIESGO", "lat": -3.26, "lon": -79.96, "fecha": datetime.date(2027, 1, 15)},
+    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 210.5, "mar_cm": 35.0, "riesgo": 0.65, "alerta": "ALERTA AMARILLA", "lat": -1.80, "lon": -79.53, "fecha": FECHA_1},
+    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 250.0, "mar_cm": 45.0, "riesgo": 0.95, "alerta": "CRÍTICO", "lat": -2.20, "lon": -79.89, "fecha": FECHA_1},
+    {"canton": "Chone", "provincia": "Manabí", "elevacion": 15.0, "lluvia_mm": 190.2, "mar_cm": 0.0, "riesgo": 0.60, "alerta": "ALERTA AMARILLA", "lat": -0.69, "lon": -80.09, "fecha": FECHA_1},
+    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 320.0, "mar_cm": 48.0, "riesgo": 0.92, "alerta": "CRÍTICO", "lat": -1.80, "lon": -79.53, "fecha": FECHA_2},
+    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 380.0, "mar_cm": 52.0, "riesgo": 0.98, "alerta": "CRÍTICO", "lat": -2.20, "lon": -79.89, "fecha": FECHA_2},
+    {"canton": "Chone", "provincia": "Manabí", "elevacion": 15.0, "lluvia_mm": 310.2, "mar_cm": 0.0, "riesgo": 0.85, "alerta": "ALTO RIESGO", "lat": -0.69, "lon": -80.09, "fecha": FECHA_2},
+    {"canton": "Machala", "provincia": "El Oro", "elevacion": 3.0, "lluvia_mm": 220.4, "mar_cm": 46.0, "riesgo": 0.82, "alerta": "ALTO RIESGO", "lat": -3.26, "lon": -79.96, "fecha": FECHA_2},
+    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 280.0, "mar_cm": 42.0, "riesgo": 0.85, "alerta": "ALTO RIESGO", "lat": -1.80, "lon": -79.53, "fecha": FECHA_3},
+    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 290.0, "mar_cm": 40.0, "riesgo": 0.88, "alerta": "ALTO RIESGO", "lat": -2.20, "lon": -79.89, "fecha": FECHA_3},
+    {"canton": "Bucay", "provincia": "Guayas", "elevacion": 320.0, "lluvia_mm": 350.0, "mar_cm": 0.0, "riesgo": 0.55, "alerta": "MEDIO (DESLAVE)", "lat": -2.20, "lon": -79.13, "fecha": FECHA_3},
+    {"canton": "Machala", "provincia": "El Oro", "elevacion": 3.0, "lluvia_mm": 180.4, "mar_cm": 40.0, "riesgo": 0.75, "alerta": "ALTO RIESGO", "lat": -3.26, "lon": -79.96, "fecha": FECHA_3},
 
     # --- Provincias añadidas: Esmeraldas, Santa Elena y Santo Domingo de los Tsáchilas ---
     # Valores de prueba (ilustrativos), igual que el resto de la tabla; reemplazar por datos reales.
-    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 230.0, "mar_cm": 30.0, "riesgo": 0.62, "alerta": "ALERTA AMARILLA", "lat": 0.96, "lon": -79.65, "fecha": datetime.date(2026, 11, 15)},
-    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 340.0, "mar_cm": 44.0, "riesgo": 0.87, "alerta": "ALTO RIESGO", "lat": 0.96, "lon": -79.65, "fecha": datetime.date(2026, 12, 15)},
-    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 300.0, "mar_cm": 38.0, "riesgo": 0.78, "alerta": "ALTO RIESGO", "lat": 0.96, "lon": -79.65, "fecha": datetime.date(2027, 1, 15)},
-    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 120.0, "mar_cm": 38.0, "riesgo": 0.52, "alerta": "ALERTA AMARILLA", "lat": -2.23, "lon": -80.86, "fecha": datetime.date(2026, 11, 15)},
-    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 260.0, "mar_cm": 50.0, "riesgo": 0.83, "alerta": "ALTO RIESGO", "lat": -2.23, "lon": -80.86, "fecha": datetime.date(2026, 12, 15)},
-    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 210.0, "mar_cm": 41.0, "riesgo": 0.72, "alerta": "ALTO RIESGO", "lat": -2.23, "lon": -80.86, "fecha": datetime.date(2027, 1, 15)},
-    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 240.0, "mar_cm": 0.0, "riesgo": 0.58, "alerta": "ALERTA AMARILLA", "lat": -0.25, "lon": -79.18, "fecha": datetime.date(2026, 11, 15)},
-    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 340.0, "mar_cm": 0.0, "riesgo": 0.74, "alerta": "ALTO RIESGO", "lat": -0.25, "lon": -79.18, "fecha": datetime.date(2026, 12, 15)},
-    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 360.0, "mar_cm": 0.0, "riesgo": 0.62, "alerta": "MEDIO (DESLAVE)", "lat": -0.25, "lon": -79.18, "fecha": datetime.date(2027, 1, 15)},
+    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 230.0, "mar_cm": 30.0, "riesgo": 0.62, "alerta": "ALERTA AMARILLA", "lat": 0.96, "lon": -79.65, "fecha": FECHA_1},
+    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 340.0, "mar_cm": 44.0, "riesgo": 0.87, "alerta": "ALTO RIESGO", "lat": 0.96, "lon": -79.65, "fecha": FECHA_2},
+    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 300.0, "mar_cm": 38.0, "riesgo": 0.78, "alerta": "ALTO RIESGO", "lat": 0.96, "lon": -79.65, "fecha": FECHA_3},
+    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 120.0, "mar_cm": 38.0, "riesgo": 0.52, "alerta": "ALERTA AMARILLA", "lat": -2.23, "lon": -80.86, "fecha": FECHA_1},
+    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 260.0, "mar_cm": 50.0, "riesgo": 0.83, "alerta": "ALTO RIESGO", "lat": -2.23, "lon": -80.86, "fecha": FECHA_2},
+    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 210.0, "mar_cm": 41.0, "riesgo": 0.72, "alerta": "ALTO RIESGO", "lat": -2.23, "lon": -80.86, "fecha": FECHA_3},
+    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 240.0, "mar_cm": 0.0, "riesgo": 0.58, "alerta": "ALERTA AMARILLA", "lat": -0.25, "lon": -79.18, "fecha": FECHA_1},
+    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 340.0, "mar_cm": 0.0, "riesgo": 0.74, "alerta": "ALTO RIESGO", "lat": -0.25, "lon": -79.18, "fecha": FECHA_2},
+    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 360.0, "mar_cm": 0.0, "riesgo": 0.62, "alerta": "MEDIO (DESLAVE)", "lat": -0.25, "lon": -79.18, "fecha": FECHA_3},
 ]
 
 df_original = pd.DataFrame(data_points)
@@ -1018,22 +1041,6 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 st.sidebar.header("⚙️ Filtros por fechas de inundación")
-def sumar_un_mes(fecha):
-    """Devuelve la misma fecha un mes después (ajusta el día si el mes siguiente es más corto)."""
-    anio = fecha.year + fecha.month // 12
-    mes = fecha.month % 12 + 1
-    dia = min(fecha.day, calendar.monthrange(anio, mes)[1])
-    return datetime.date(anio, mes, dia)
-
-
-def fecha_actual_ecuador():
-    """Fecha de hoy en hora de Ecuador (el servidor de Streamlit Cloud trabaja en UTC)."""
-    try:
-        return datetime.datetime.now(ZoneInfo("America/Guayaquil")).date()
-    except Exception:
-        return datetime.date.today()
-
-
 def _recalcular_proyeccion():
     """Al cambiar la fecha inicial, la proyección vuelve a ser un mes después."""
     st.session_state["fecha_fin"] = sumar_un_mes(st.session_state["fecha_inicio"])
