@@ -593,6 +593,15 @@ umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Cesium")
 st.sidebar.caption("El cambio de mapa base (Esri / OSM) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
+st.sidebar.caption(
+    "**Fuentes y créditos**  \n"
+    "Topografía: © colaboradores de OpenStreetMap  \n"
+    "Imagen: © Esri, Maxar, Earthstar Geographics  \n"
+    "Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST  \n"
+    "Satélite: NASA GIBS / MODIS  \n"
+    "Perfil de Ecuador: geoBoundaries (CC0)  \n"
+    "Visor: CesiumJS"
+)
 
 df_filtrado = df_original[
     (df_original['fecha'] >= fecha_inicio) &
@@ -611,7 +620,6 @@ df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().res
 # ==========================================
 st.subheader("📍 Visor Geográfico Interactivo (Cesium 3D)")
 render_cesium(df_mapa_reciente, alto=560)
-st.caption("Topografía: © colaboradores de OpenStreetMap · Imagen: © Esri, Maxar, Earthstar Geographics · Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST · Satélite: NASA GIBS / MODIS · Visor: CesiumJS")
 
 # ==========================================
 # 6. INDICADORES, GRÁFICO Y TABLA
