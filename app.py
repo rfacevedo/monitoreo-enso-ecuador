@@ -80,10 +80,14 @@ CESIUM_HTML_TEMPLATE = """
     border-radius: 8px; display: none; }
   .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(10,25,47,.9);
     color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.7; }
-  #btnPlay { display: none; position: absolute; left: 6px; bottom: 3px; z-index: 12; width: 28px;
-    height: 26px; border: 0; border-radius: 4px; background: #2563EB; color: #fff; cursor: pointer;
-    font-size: 13px; line-height: 1; padding: 0; }
+  /* Controles del pronóstico mensual (▶ + línea de tiempo), en la barra superior izquierda */
+  #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; }
+  #btnPlay { width: 34px; height: 34px; border: 0; background: #2563EB; color: #fff; cursor: pointer;
+    font-size: 14px; line-height: 1; padding: 0; margin-right: 8px; }
   #btnPlay:hover { background: #1D4ED8; }
+  #slotTimeline { position: relative; width: 340px; height: 27px; }
+  #slotTimeline .cesium-viewer-timelineContainer { position: relative !important; left: 0 !important;
+    right: auto !important; bottom: auto !important; width: 340px; height: 27px; }
   #leyenda { left: 10px; }
   #leyendaNoaa { right: 10px; display: none; max-width: 230px; }
   .leyenda i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px;
@@ -129,6 +133,10 @@ CESIUM_HTML_TEMPLATE = """
     <label for="selMes">Mes</label>
     <select id="selMes"></select>
   </div>
+  <div class="grupo" id="boxTiempo">
+    <button id="btnPlay" type="button" title="Reproducir meses" aria-label="Reproducir meses">&#9654;</button>
+    <div id="slotTimeline"></div>
+  </div>
   <div class="grupo" id="boxFecha" style="display:none">
     <label for="inpFecha">Fecha</label>
     <input type="date" id="inpFecha">
@@ -140,7 +148,6 @@ CESIUM_HTML_TEMPLATE = """
   <div class="grupo"><button id="btnHome">Inicio</button></div>
   <span id="estado"></span>
 </div>
-<button id="btnPlay" type="button" title="Reproducir meses" aria-label="Reproducir meses">&#9654;</button>
 <div class="leyenda" id="leyenda"></div>
 <div class="leyenda" id="leyendaNoaa"></div>
 <script>
@@ -173,7 +180,10 @@ CESIUM_HTML_TEMPLATE = """
     return;
   }
 
+  // La línea de tiempo de Cesium se mueve a la barra superior izquierda (junto al botón ▶)
   const timelineEl = viewer.timeline.container;
+  const boxTiempo = document.getElementById('boxTiempo');
+  document.getElementById('slotTimeline').appendChild(timelineEl);
   timelineEl.style.display = 'none';
 
   // ---- Mapas base: Esri (imagen, por defecto) y OSM (topografía) ----
@@ -460,9 +470,8 @@ CESIUM_HTML_TEMPLATE = """
     viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
     viewer.clock.shouldAnimate = false;
     viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[ccsrMes] + 15 * 86400000));
+    boxTiempo.style.display = 'flex';
     timelineEl.style.display = 'block';
-    timelineEl.style.left = '40px';      // deja sitio al botón de reproducir
-    btnPlay.style.display = 'block';
     viewer.timeline.zoomTo(ini, fin);
     viewer.timeline.resize();
     boxMes.style.display = 'flex';
@@ -607,7 +616,7 @@ CESIUM_HTML_TEMPLATE = """
     boxFecha.style.display = 'none';
     boxMes.style.display = 'none';
     timelineEl.style.display = 'none';
-    btnPlay.style.display = 'none';
+    boxTiempo.style.display = 'none';
     detenerCcsr();
     fuenteCcsr.entities.removeAll();
     quitarModis();
@@ -743,9 +752,10 @@ CESIUM_HTML_TEMPLATE = """
 
   // ---- Cámara ----
   function irAInicio(duracion) {
+    // Vista cenital (de arriba, norte arriba) que encuadra Ecuador continental
     viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(-79.6, -5.6, 560000),
-      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-48), roll: 0 },
+      destination: Cesium.Rectangle.fromDegrees(-82.5, -5.6, -76.0, 1.8),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
       duration: duracion === undefined ? 1.5 : duracion
     });
   }
