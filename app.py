@@ -561,7 +561,6 @@ st.markdown(
 )
 
 st.markdown('<p class="titulo-mediano">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>', unsafe_allow_html=True)
-st.markdown("### Integración de Métricas NOAA, Copernicus, CIIFEN e INOCAR para el Litoral Ecuatoriano")
 
 # ==========================================
 # 3. BASE DE DATOS DE PRUEBA
