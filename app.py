@@ -973,10 +973,10 @@ CESIUM_HTML_TEMPLATE = """
 
   // ---- Cámara ----
   function irAInicio(duracion) {
-    // Vista casi cenital (inclinada 3° hacia el norte, norte arriba) que encuadra Ecuador continental
+    // Vista casi cenital (inclinada 6° hacia el norte, norte arriba) que encuadra Ecuador continental
     viewer.camera.flyTo({
       destination: Cesium.Rectangle.fromDegrees(-82.5, -5.6, -76.0, 1.8),
-      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-87), roll: 0 },
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-84), roll: 0 },
       duration: duracion === undefined ? 1.5 : duracion
     });
   }
