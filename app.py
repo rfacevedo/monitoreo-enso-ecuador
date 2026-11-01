@@ -539,6 +539,21 @@ st.markdown(
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     [data-testid="stSidebar"] input { color: #000000 !important; font-weight: bold !important; }
+    /* Campos de fecha: fondo blanco y texto negro (día, mes, año y separadores),
+       sea cual sea el tema claro/oscuro del navegador */
+    [data-testid="stSidebar"] [data-testid="stDateInputField"] {
+        background-color: #FFFFFF !important;
+        border-radius: 6px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stDateInputField"],
+    [data-testid="stSidebar"] [data-testid="stDateInputField"] *,
+    [data-testid="stSidebar"] [data-testid="stDateInputField"] span,
+    [data-testid="stSidebar"] [data-testid="stDateInputField"] input {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        font-weight: bold !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stDateInput"] svg { fill: #000000 !important; color: #000000 !important; }
     .titulo-mediano { font-size: 28px !important; font-weight: bold !important; color: #1E3A8A; margin-bottom: 5px; }
     </style>
     """,
