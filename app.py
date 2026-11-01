@@ -62,7 +62,7 @@ CESIUM_HTML_TEMPLATE = """
   html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
     font-family: -apple-system, 'Segoe UI', Arial, sans-serif; background: #0A192F; }
   .toolbar { position: absolute; top: 10px; left: 10px; right: 90px; z-index: 10; display: flex; gap: 10px;
-    flex-wrap: wrap; align-items: center; }
+    flex-wrap: wrap; align-items: flex-start; }
   .grupo { display: flex; align-items: center; background: rgba(10,25,47,.92); border-radius: 8px;
     overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.45); }
   .grupo button { border: 0; background: transparent; color: #CBD5E1; padding: 8px 14px;
@@ -80,6 +80,10 @@ CESIUM_HTML_TEMPLATE = """
     border-radius: 8px; display: none; }
   .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(10,25,47,.9);
     color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.7; }
+  /* Mapas base apilados: Esri arriba, OSM debajo, del mismo ancho */
+  #grpBase { flex-direction: column; align-items: stretch; }
+  #grpBase button { text-align: left; }
+  #grpBase button + button { border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
   #grpVista button { padding: 8px 11px; min-width: 32px; font-size: 14px; }
   /* Controles del pronóstico mensual (▶ + línea de tiempo), en la barra superior izquierda */
   #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; }
@@ -934,7 +938,7 @@ st.sidebar.markdown(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.header("🗺️ Visor Cesium")
+st.sidebar.header("🗺️ Visor Geográfico")
 st.sidebar.caption("El cambio de mapa base (Esri / OSM) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
 st.sidebar.caption(
     "**Fuentes y créditos**  \n"
