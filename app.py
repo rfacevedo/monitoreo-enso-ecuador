@@ -144,7 +144,7 @@ CESIUM_HTML_TEMPLATE = """
   #slotTimeline { position: relative; flex: 1 1 auto; min-width: 0; height: 27px; }
   #slotTimeline .cesium-viewer-timelineContainer { position: relative !important; left: 0 !important;
     right: auto !important; bottom: auto !important; width: 100% !important; height: 27px; }
-  /* Buscador «Buscar tu Cantón»: botón arriba a la derecha; el panel se abre debajo y por encima de la columna Vista */
+  /* Buscador «Buscar Cantón»: botón arriba a la derecha; el panel se abre debajo y por encima de la columna Vista */
   #grpBuscar { position: absolute; right: 10px; top: 10px; z-index: 14; }
   #grpBuscar button { padding: 8px 14px; }
   #panelBuscar { display: none; position: absolute; right: 10px; top: 48px; z-index: 15; width: 292px; flex-direction: column;
@@ -222,7 +222,7 @@ CESIUM_HTML_TEMPLATE = """
   <div id="slotTimeline"></div>
 </div>
 <div class="grupo" id="grpBuscar">
-  <button id="btnBuscar" type="button" title="Buscar un cantón de la Costa y ubicarlo en el mapa">&#128269; Buscar tu Cantón</button>
+  <button id="btnBuscar" type="button" title="Buscar un cantón de la Costa y ubicarlo en el mapa">&#128269; Buscar Cantón</button>
 </div>
 <div class="grupo" id="panelBuscar">
   <div class="fila">
@@ -973,10 +973,10 @@ CESIUM_HTML_TEMPLATE = """
 
   // ---- Cámara ----
   function irAInicio(duracion) {
-    // Vista cenital (de arriba, norte arriba) que encuadra Ecuador continental
+    // Vista casi cenital (inclinada 3° hacia el norte, norte arriba) que encuadra Ecuador continental
     viewer.camera.flyTo({
       destination: Cesium.Rectangle.fromDegrees(-82.5, -5.6, -76.0, 1.8),
-      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-87), roll: 0 },
       duration: duracion === undefined ? 1.5 : duracion
     });
   }
@@ -1023,7 +1023,7 @@ CESIUM_HTML_TEMPLATE = """
   };
 
 
-  // ---- Buscar tu Cantón ----
+  // ---- Buscar Cantón ----
   // 88 cantones de la Costa (INEC / OCHA ROLAC vía geoBoundaries): se escribe el nombre y el mapa se acerca al cantón,
   // dibuja su contorno y lo rotula. Si el cantón está en el modelo de riesgo, muestra su riesgo.
   const LISTA_CANTONES = __CANTONES__;
