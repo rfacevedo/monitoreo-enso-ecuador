@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import almacen
+import cantones_costa as cc
 import fuentes_datos as fd
 import modelo_riesgo as mr
 
@@ -162,6 +163,28 @@ class PruebasAlmacen(unittest.TestCase):
             self.assertEqual(primera["_cargado"], segunda["_cargado"])   # mismo momento: no se duplica la «foto» del riesgo
         finally:
             (fd.obtener_noaa_enso, fd.obtener_gfs, fd.obtener_cfsv2, fd.obtener_erfen, fd.obtener_ciifen) = originales
+
+
+class PruebasBuscadorCantones(unittest.TestCase):
+    def test_datos_del_buscador(self):
+        lista = cc.CANTONES_COSTA
+        self.assertEqual(len(lista), 88)
+        self.assertEqual({c["p"] for c in lista}, {"Esmeraldas", "Manabí", "Santo Domingo de los Tsáchilas", "Santa Elena",
+                                                   "Guayas", "Los Ríos", "El Oro"})
+        for c in lista:
+            self.assertTrue(c["r"], c["n"])                              # todo cantón tiene contorno
+            oeste, sur, este, norte = c["b"]
+            self.assertTrue(oeste <= c["c"][0] <= este and sur <= c["c"][1] <= norte, c["n"])
+            self.assertTrue(-82 < oeste < este < -78 and -5 < sur < norte < 2, c["n"])      # dentro de la Costa
+            for anillo in c["r"]:
+                self.assertEqual(len(anillo) % 2, 0)
+        self.assertEqual(len({(c["n"], c["p"]) for c in lista}), 88)    # sin duplicados
+
+    def test_cantones_del_modelo_existen_en_el_buscador(self):
+        nombres = {c["n"] for c in cc.CANTONES_COSTA}
+        alias = {"Bucay": "General Antonio Elizalde (Bucay)"}
+        for c in mr.CANTONES:
+            self.assertIn(alias.get(c["canton"], c["canton"]), nombres, c["canton"])
 
 
 class PruebasModelo(unittest.TestCase):

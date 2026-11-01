@@ -15,6 +15,7 @@ import streamlit.components.v1 as components
 import almacen
 import fuentes_datos
 import modelo_riesgo
+from cantones_costa import CANTONES_COSTA
 from ecuador_perfil import ECUADOR_PERFIL
 
 # Streamlit Cloud no recarga los módulos propios cuando se actualiza el repositorio (solo vuelve a ejecutar app.py),
@@ -143,6 +144,22 @@ CESIUM_HTML_TEMPLATE = """
   #slotTimeline { position: relative; flex: 1 1 auto; min-width: 0; height: 27px; }
   #slotTimeline .cesium-viewer-timelineContainer { position: relative !important; left: 0 !important;
     right: auto !important; bottom: auto !important; width: 100% !important; height: 27px; }
+  /* Buscador «Buscar tu Cantón»: botón arriba a la derecha; el panel se abre debajo y por encima de la columna Vista */
+  #grpBuscar { position: absolute; right: 10px; top: 10px; z-index: 14; }
+  #grpBuscar button { padding: 8px 14px; }
+  #panelBuscar { display: none; position: absolute; right: 10px; top: 48px; z-index: 15; width: 292px; flex-direction: column;
+    align-items: stretch; padding: 10px; color: #fff; font-size: 13px; }
+  #panelBuscar .fila { display: flex; gap: 6px; }
+  #txtBuscar { flex: 1 1 auto; min-width: 0; border: 0; border-radius: 6px; padding: 8px 10px; font-size: 14px; color: #111; outline: none; }
+  #panelBuscar button.x { background: rgba(255,255,255,.14); border-radius: 6px; padding: 0 10px; color: #fff; }
+  #listaBuscar { list-style: none; margin: 6px 0 0; padding: 0; max-height: 210px; overflow-y: auto; }
+  #listaBuscar li { padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+  #listaBuscar li small { color: #94A3B8; margin-left: 6px; }
+  #listaBuscar li:hover, #listaBuscar li.sel { background: #2563EB; }
+  #listaBuscar li:hover small, #listaBuscar li.sel small { color: #DBEAFE; }
+  #resBuscar { margin-top: 8px; line-height: 1.45; }
+  #resBuscar .chip { display: inline-block; padding: 1px 8px; border-radius: 10px; font-weight: 700; color: #fff; margin-left: 4px; }
+  #resBuscar small { color: #CBD5E1; display: block; margin-top: 3px; }
   #leyenda { left: 10px; }
   #leyendaNoaa { right: 10px; display: none; max-width: 230px; }
   .leyenda i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px;
@@ -200,6 +217,17 @@ CESIUM_HTML_TEMPLATE = """
 <div class="grupo" id="boxTiempo">
   <button id="btnPlay" type="button" title="Reproducir" aria-label="Reproducir">&#9654;</button>
   <div id="slotTimeline"></div>
+</div>
+<div class="grupo" id="grpBuscar">
+  <button id="btnBuscar" type="button" title="Buscar un cantón de la Costa y ubicarlo en el mapa">&#128269; Buscar tu Cantón</button>
+</div>
+<div class="grupo" id="panelBuscar">
+  <div class="fila">
+    <input id="txtBuscar" type="text" placeholder="Escribe el cantón (p. ej. Manta)" autocomplete="off" aria-label="Nombre del cantón">
+    <button id="btnLimpiar" class="x" type="button" title="Quitar la selección del mapa" aria-label="Quitar selección">&#10005;</button>
+  </div>
+  <ul id="listaBuscar"></ul>
+  <div id="resBuscar"></div>
 </div>
 <div class="grupo" id="grpVista">
   <label>Vista</label>
@@ -961,6 +989,147 @@ CESIUM_HTML_TEMPLATE = """
     orbitar(-viewer.camera.heading, Cesium.Math.toRadians(-90) - viewer.camera.pitch);
   };
 
+
+  // ---- Buscar tu Cantón ----
+  // 88 cantones de la Costa (INEC / OCHA ROLAC vía geoBoundaries): se escribe el nombre y el mapa se acerca al cantón,
+  // dibuja su contorno y lo rotula. Si el cantón está en el modelo de riesgo, muestra su riesgo.
+  const LISTA_CANTONES = __CANTONES__;
+  const RIESGOS = __RIESGOS__;
+  const COMBINANTES = new RegExp('[' + String.fromCharCode(0x300) + '-' + String.fromCharCode(0x36f) + ']', 'g');
+  function norm(t) { return t.normalize('NFD').replace(COMBINANTES, '').toLowerCase().trim(); }
+  LISTA_CANTONES.forEach(function (c) { c.claves = [norm(c.n)].concat((c.a || []).map(norm)); });
+
+  const fuenteBuscar = new Cesium.CustomDataSource('buscar-canton');
+  viewer.dataSources.add(fuenteBuscar);
+  const panelBuscar = document.getElementById('panelBuscar');
+  const txtBuscar = document.getElementById('txtBuscar');
+  const listaBuscar = document.getElementById('listaBuscar');
+  const resBuscar = document.getElementById('resBuscar');
+  let coincidencias = [], indiceSel = -1, temporizador = null;
+
+  function buscarCoincidencias(texto) {
+    const q = norm(texto);
+    if (!q) { return []; }
+    return LISTA_CANTONES.filter(function (c) {
+      return c.claves.some(function (k) { return k.indexOf(q) >= 0; });
+    }).sort(function (a, b) {
+      const ea = a.claves.some(function (k) { return k.indexOf(q) === 0; }) ? 0 : 1;
+      const eb = b.claves.some(function (k) { return k.indexOf(q) === 0; }) ? 0 : 1;
+      return ea - eb || a.n.localeCompare(b.n);
+    }).slice(0, 8);
+  }
+  function pintarLista() {
+    listaBuscar.innerHTML = '';
+    coincidencias.forEach(function (c, i) {
+      const li = document.createElement('li');
+      li.textContent = c.n;
+      const p = document.createElement('small');
+      p.textContent = c.p;
+      li.appendChild(p);
+      if (i === indiceSel) { li.className = 'sel'; }
+      li.onmousedown = function (e) { e.preventDefault(); seleccionarCanton(c); };
+      listaBuscar.appendChild(li);
+    });
+  }
+  function limpiarSeleccion() {
+    fuenteBuscar.entities.removeAll();
+    resBuscar.textContent = '';
+    viewer.scene.requestRender();
+  }
+  function mensaje(texto) { resBuscar.textContent = texto; }
+
+  function seleccionarCanton(c) {
+    fuenteBuscar.entities.removeAll();
+    listaBuscar.innerHTML = '';
+    coincidencias = [];
+    txtBuscar.value = c.n;
+    const cian = Cesium.Color.fromCssColorString('#22D3EE');
+    c.r.forEach(function (anillo) {
+      const pos = Cesium.Cartesian3.fromDegreesArray(anillo);
+      fuenteBuscar.entities.add({ polygon: { hierarchy: new Cesium.PolygonHierarchy(pos), height: 0,
+        material: cian.withAlpha(0.22), outline: false } });
+      const cerrado = pos.concat([pos[0]]);
+      fuenteBuscar.entities.add({ polyline: { positions: cerrado, width: 7, clampToGround: true,
+        material: Cesium.Color.BLACK.withAlpha(0.5) } });
+      fuenteBuscar.entities.add({ polyline: { positions: cerrado, width: 3.5, clampToGround: true, material: cian } });
+    });
+    fuenteBuscar.entities.add({
+      name: c.n, position: Cesium.Cartesian3.fromDegrees(c.c[0], c.c[1]),
+      point: { pixelSize: 11, color: cian, outlineColor: Cesium.Color.WHITE, outlineWidth: 2,
+               disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: { text: c.n, font: '700 17px sans-serif', fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK,
+               outlineWidth: 4, style: Cesium.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+               pixelOffset: new Cesium.Cartesian2(0, -14), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      description: 'Cantón de ' + c.p
+    });
+    const b = c.b, mx = Math.max((b[2] - b[0]) * 0.25, 0.05), my = Math.max((b[3] - b[1]) * 0.25, 0.05);
+    viewer.camera.flyTo({
+      destination: Cesium.Rectangle.fromDegrees(b[0] - mx, b[1] - my, b[2] + mx, b[3] + my),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 }, duration: 1.6
+    });
+    // Ficha del cantón (se arma con textContent: nada de HTML externo)
+    resBuscar.textContent = '';
+    const t = document.createElement('div');
+    const strong = document.createElement('b');
+    strong.textContent = c.n;
+    t.appendChild(strong);
+    t.appendChild(document.createTextNode(' · ' + c.p));
+    resBuscar.appendChild(t);
+    const r = RIESGOS[c.n];
+    const d = document.createElement('div');
+    if (r) {
+      d.appendChild(document.createTextNode('Riesgo máximo: ' + Math.round(r.riesgo * 100) + ' %'));
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.style.background = COLORES[r.alerta] || '#6B7280';
+      chip.textContent = r.alerta;
+      d.appendChild(chip);
+      const s2 = document.createElement('small');
+      s2.textContent = 'Peor día en las fechas elegidas: ' + r.fecha + ' (' + r.horizonte + ')';
+      d.appendChild(s2);
+    } else {
+      d.textContent = 'Sin cálculo de riesgo todavía: el modelo cubre ' + Object.keys(RIESGOS).length +
+        ' cantones (los que están en la ventana de fechas elegida).';
+    }
+    resBuscar.appendChild(d);
+    viewer.scene.requestRender();
+  }
+
+  document.getElementById('btnBuscar').onclick = function () {
+    const abrir = panelBuscar.style.display !== 'flex';
+    panelBuscar.style.display = abrir ? 'flex' : 'none';
+    if (abrir) { txtBuscar.focus(); }
+  };
+  document.getElementById('btnLimpiar').onclick = function () {
+    txtBuscar.value = '';
+    coincidencias = [];
+    listaBuscar.innerHTML = '';
+    limpiarSeleccion();
+    txtBuscar.focus();
+  };
+  txtBuscar.addEventListener('input', function () {
+    clearTimeout(temporizador);
+    coincidencias = buscarCoincidencias(txtBuscar.value);
+    indiceSel = -1;
+    pintarLista();
+    if (txtBuscar.value.trim() && !coincidencias.length) { mensaje('No se encontró «' + txtBuscar.value.trim() + '» entre los cantones de la Costa.'); }
+    else if (!txtBuscar.value.trim()) { resBuscar.textContent = ''; }
+    // Ubicación automática: si el texto coincide con un solo cantón, se marca solo (tras una breve pausa al escribir)
+    if (coincidencias.length === 1 && norm(txtBuscar.value).length >= 4) {
+      temporizador = setTimeout(function () { seleccionarCanton(coincidencias[0]); }, 700);
+    }
+  });
+  txtBuscar.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown' && coincidencias.length) { indiceSel = (indiceSel + 1) % coincidencias.length; pintarLista(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp' && coincidencias.length) { indiceSel = (indiceSel - 1 + coincidencias.length) % coincidencias.length; pintarLista(); e.preventDefault(); }
+    else if (e.key === 'Enter') {
+      clearTimeout(temporizador);
+      const elegido = indiceSel >= 0 ? coincidencias[indiceSel] : coincidencias[0];
+      if (elegido) { seleccionarCanton(elegido); }
+      e.preventDefault();
+    } else if (e.key === 'Escape') { panelBuscar.style.display = 'none'; }
+  });
+
   // ---- Estado inicial ----
   setBase('esri');
   irAInicio(0);
@@ -971,7 +1140,17 @@ CESIUM_HTML_TEMPLATE = """
 """
 
 
+# Nombre del modelo de riesgo -> nombre en la lista de cantones del buscador
+ALIAS_MODELO_A_BUSCADOR = {"Bucay": "General Antonio Elizalde (Bucay)"}
+
+
 def render_cesium(df, alto=560):
+    riesgos = {
+        ALIAS_MODELO_A_BUSCADOR.get(r["canton"], r["canton"]): {
+            "riesgo": float(r["riesgo"]), "alerta": r["alerta"], "fecha": r["fecha"].isoformat(), "horizonte": r["horizonte"],
+        }
+        for _, r in df.iterrows()
+    }
     puntos = [
         {
             "canton": r["canton"], "provincia": r["provincia"],
@@ -989,6 +1168,8 @@ def render_cesium(df, alto=560):
         .replace("__PUNTOS__", json.dumps(puntos, ensure_ascii=False))
         .replace("__COLORES__", json.dumps(COLORES_ALERTA, ensure_ascii=False))
         .replace("__PERFIL__", json.dumps(ECUADOR_PERFIL, separators=(",", ":")))
+        .replace("__CANTONES__", json.dumps(CANTONES_COSTA, ensure_ascii=False, separators=(",", ":")))
+        .replace("__RIESGOS__", json.dumps(riesgos, ensure_ascii=False, separators=(",", ":")))
     )
     components.html(html, height=alto, scrolling=False)
 
@@ -1212,6 +1393,7 @@ st.sidebar.caption(
     "Pronóstico estacional: CCSR/IRI, Columbia Climate School (CFSv2 de NOAA/NCEP)  \n"
     "Satélite: NASA GIBS / MODIS  \n"
     "Perfil de Ecuador: geoBoundaries (CC0)  \n"
+    "Cantones de la Costa: INEC y OCHA ROLAC, vía geoBoundaries (CC BY 3.0 IGO)  \n"
     "Visor: CesiumJS"
 )
 
