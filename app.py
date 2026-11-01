@@ -554,13 +554,15 @@ st.markdown(
         font-weight: bold !important;
     }
     [data-testid="stSidebar"] [data-testid="stDateInput"] svg { fill: #000000 !important; color: #000000 !important; }
-    .titulo-mediano { font-size: 28px !important; font-weight: bold !important; color: #1E3A8A; margin-bottom: 5px; }
+    [data-testid="stSidebar"] p.titulo-lateral {
+        font-size: 20px !important; font-weight: bold !important; line-height: 1.3 !important;
+        color: #FFFFFF !important; margin-bottom: 12px !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-st.markdown('<p class="titulo-mediano">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>', unsafe_allow_html=True)
 
 # ==========================================
 # 3. BASE DE DATOS DE PRUEBA
@@ -584,6 +586,10 @@ df_original = pd.DataFrame(data_points)
 # ==========================================
 # 4. INTERFAZ LATERAL (FILTROS)
 # ==========================================
+st.sidebar.markdown(
+    '<p class="titulo-lateral">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>',
+    unsafe_allow_html=True,
+)
 st.sidebar.header("⚙️ Filtros del Modelo")
 fecha_inicio = st.sidebar.date_input("Fecha Inicial", datetime.date(2026, 11, 1))
 fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2, 1))
