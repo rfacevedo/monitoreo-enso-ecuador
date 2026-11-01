@@ -109,6 +109,10 @@ CESIUM_HTML_TEMPLATE = """
         <option value="nubes">Nubes / vapor de agua (GOES)</option>
         <option value="sst">Temp. superficie del mar (GFS)</option>
       </optgroup>
+      <optgroup label="Pronóstico estacional CCSR/IRI">
+        <option value="c_pr">CCSR/IRI Precipitación (CFSv2)</option>
+        <option value="c_tas">CCSR/IRI Temperatura (CFSv2)</option>
+      </optgroup>
       <optgroup label="Satélite MODIS (NASA)">
         <option value="m_tc">MODIS Color real (Terra)</option>
         <option value="m_lst">MODIS Temp. superficie terrestre (día)</option>
@@ -116,6 +120,10 @@ CESIUM_HTML_TEMPLATE = """
         <option value="m_cf">MODIS Fracción de nubes (día)</option>
       </optgroup>
     </select>
+  </div>
+  <div class="grupo" id="boxMes" style="display:none">
+    <label for="selMes">Mes</label>
+    <select id="selMes"></select>
   </div>
   <div class="grupo" id="boxFecha" style="display:none">
     <label for="inpFecha">Fecha</label>
@@ -148,7 +156,7 @@ CESIUM_HTML_TEMPLATE = """
       scene3DOnly: true,
       navigationHelpButton: false,
       animation: false,
-      timeline: false,
+      timeline: true,              // solo se muestra con las capas de pronóstico mensual (CCSR/IRI)
       fullscreenButton: true,
       infoBox: true,
       selectionIndicator: true,
@@ -159,6 +167,9 @@ CESIUM_HTML_TEMPLATE = """
     document.getElementById('aviso').style.display = 'flex';
     return;
   }
+
+  const timelineEl = viewer.timeline.container;
+  timelineEl.style.display = 'none';
 
   // ---- Mapas base: Esri (imagen, por defecto) y OSM (topografía) ----
   const capaEsri = viewer.imageryLayers.addImageryProvider(
@@ -240,6 +251,204 @@ CESIUM_HTML_TEMPLATE = """
     capaModis.alpha = c.alpha;
     viewer.scene.requestRender();
   }
+
+  // Pronóstico estacional CCSR/IRI (Columbia): media de los 32 miembros del CFSv2 (NOAA/NCEP, NMME),
+  // 10 meses de pronóstico, rejilla de 1°. Se lee por OPeNDAP binario (.dods) directo desde el
+  // navegador: el servidor de CCSR responde con CORS abierto. Los meses se navegan con la línea de tiempo.
+  const CCSR_BASE = 'https://forecast.ccsr.columbia.edu/data/NMME/NOAA-NCEP/CFSv2/early_month_samples/forecast/';
+  const CCSR = {
+    c_pr:  { v: 'pr',  titulo: 'Precipitación (CFSv2)', unidad: 'mm/día', dec: 1, minimo: 0.2,
+             escala: [[0, '#E0F2FE'], [1, '#A6D8F0'], [3, '#4FA3E0'], [6, '#2563EB'], [10, '#7C3AED']] },
+    c_tas: { v: 'tas', titulo: 'Temperatura (CFSv2)', unidad: '°C', dec: 0, minimo: -100,
+             escala: [[-100, '#3B82F6'], [14, '#22D3EE'], [18, '#22C55E'], [22, '#FACC15'], [26, '#F97316'], [30, '#EF4444']] }
+  };
+  const NM = 32, NL = 10, NY = 7, NX = 6;          // miembros, meses de pronóstico, lat -5..1, lon -82..-77
+  const MESES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const fuenteCcsr = new Cesium.CustomDataSource('ccsr');
+  viewer.dataSources.add(fuenteCcsr);
+  const boxMes = document.getElementById('boxMes');
+  const selMes = document.getElementById('selMes');
+  let ccsrDatos = null;     // {meses:[ms], emision, pr:[mes][celda], tas:[mes][celda], lats, lons}
+  let ccsrMes = null;       // mes elegido (se conserva al cambiar entre precipitación y temperatura)
+
+  function etiquetaMes(ms) {
+    const d = new Date(ms);
+    return MESES_ES[d.getUTCMonth()] + '-' + d.getUTCFullYear();
+  }
+
+  // Lee una respuesta OPeNDAP binaria: texto DDS + "Data:" + datos XDR (big-endian)
+  function dods(url) {
+    return fetch(url).then(function (r) {
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      return r.arrayBuffer();
+    }).then(function (buf) {
+      const b = new Uint8Array(buf);
+      const marca = [10, 68, 97, 116, 97, 58, 10];   // salto de línea + "Data:" + salto de línea
+      let i = 0;
+      while (i < b.length - 7) {
+        let igual = true;
+        for (let k = 0; k < 7; k++) { if (b[i + k] !== marca[k]) { igual = false; break; } }
+        if (igual) { break; }
+        i++;
+      }
+      if (i >= b.length - 7) { throw new Error('Respuesta OPeNDAP inválida'); }
+      return new DataView(buf, i + 7);
+    });
+  }
+  function leerInts(dv) {
+    const n = dv.getUint32(0), a = [];
+    for (let k = 0; k < n; k++) { a.push(dv.getInt32(8 + 4 * k)); }
+    return a;
+  }
+  function leerFloats(dv) {
+    const n = dv.getUint32(0), a = new Float32Array(n);
+    for (let k = 0; k < n; k++) { a[k] = dv.getFloat32(8 + 4 * k); }
+    return a;
+  }
+  // Media de los miembros: entrada ordenada [miembro][mes][lat][lon]
+  function mediaMiembros(f) {
+    const celdas = NY * NX, porMiembro = NL * celdas, salida = [];
+    for (let l = 0; l < NL; l++) {
+      const fila = new Array(celdas).fill(0);
+      for (let m = 0; m < NM; m++) {
+        for (let j = 0; j < celdas; j++) { fila[j] += f[m * porMiembro + l * celdas + j] / NM; }
+      }
+      salida.push(fila);
+    }
+    return salida;
+  }
+
+  function cargarCcsr() {
+    if (ccsrDatos) { return Promise.resolve(ccsrDatos); }
+    // La última emisión es el último índice de S: se lee su tamaño del .dds
+    return fetch(CCSR_BASE + 'pr.dds').then(function (r) {
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      return r.text();
+    }).then(function (dds) {
+      const p = dds.indexOf('S = ');
+      const nS = parseInt(dds.substring(p + 4), 10);
+      if (!(nS > 0)) { throw new Error('No se pudo leer la emisión'); }
+      const s = nS - 1;
+      const rng = '[' + s + '][0:' + (NM - 1) + '][0:' + (NL - 1) + '][85:91][278:283]';
+      return Promise.all([
+        dods(CCSR_BASE + 'pr.dods?pr' + rng),
+        dods(CCSR_BASE + 'tas.dods?tas' + rng),
+        dods(CCSR_BASE + 'pr.dods?target[' + s + '][0:' + (NL - 1) + ']'),
+        dods(CCSR_BASE + 'pr.dods?Y[85:91]'),
+        dods(CCSR_BASE + 'pr.dods?X[278:283]'),
+        dods(CCSR_BASE + 'pr.dods?S[' + s + ']')
+      ]);
+    }).then(function (r) {
+      const lats = leerInts(r[3]), lonsE = leerInts(r[4]);
+      if (lats[0] !== -5 || lats[NY - 1] !== 1 || lonsE[0] !== 278) {
+        throw new Error('La rejilla del servicio cambió');
+      }
+      const dia0 = Date.UTC(1960, 0, 1);
+      ccsrDatos = {
+        meses: leerInts(r[2]).map(function (d) { return dia0 + d * 86400000; }),
+        emision: dia0 + leerInts(r[5])[0] * 86400000,
+        pr: mediaMiembros(leerFloats(r[0])),
+        tas: mediaMiembros(leerFloats(r[1])),
+        lats: lats,
+        lons: lonsE.map(function (x) { return x > 180 ? x - 360 : x; })
+      };
+      selMes.innerHTML = '';
+      ccsrDatos.meses.forEach(function (ms, i) {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = etiquetaMes(ms);
+        selMes.appendChild(o);
+      });
+      return ccsrDatos;
+    });
+  }
+
+  function indiceMesDesdeFecha(ms) {
+    let idx = 0;
+    ccsrDatos.meses.forEach(function (m, i) { if (m <= ms) { idx = i; } });
+    return idx;
+  }
+
+  function dibujarCcsr(clave, mes) {
+    fuenteCcsr.entities.removeAll();
+    const c = CCSR[clave], serie = ccsrDatos[c.v][mes], etq = etiquetaMes(ccsrDatos.meses[mes]);
+    ccsrDatos.lats.forEach(function (lat, y) {
+      ccsrDatos.lons.forEach(function (lon, x) {
+        const val = serie[y * NX + x];
+        if (isNaN(val) || val < c.minimo) { return; }
+        const col = Cesium.Color.fromCssColorString(colorEscala(c.escala, val));
+        fuenteCcsr.entities.add({
+          name: c.titulo + ' ' + etq,
+          position: Cesium.Cartesian3.fromDegrees(lon, lat),
+          rectangle: {
+            coordinates: Cesium.Rectangle.fromDegrees(lon - 0.5, lat - 0.5, lon + 0.5, lat + 0.5),
+            material: col.withAlpha(0.55), height: 0
+          },
+          label: {
+            text: val.toFixed(c.dec) + (clave === 'c_tas' ? '°' : ''),
+            font: '600 11px sans-serif', fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK, outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE, scale: 0.9,
+            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 1500000)
+          },
+          description: c.titulo + ' · ' + etq + ': ' + val.toFixed(2) + ' ' + c.unidad +
+            '<br>Media de ' + NM + ' miembros del CFSv2 (NOAA/NCEP, NMME)' +
+            '<br>Punto de rejilla: ' + lat + '°, ' + lon + '°'
+        });
+      });
+    });
+    viewer.scene.requestRender();
+  }
+
+  function leyendaCcsr(clave) {
+    const c = CCSR[clave], e = c.escala;
+    let html = '<b>CCSR/IRI · ' + c.titulo + '</b>';
+    e.forEach(function (t, i) {
+      let txt;
+      if (i === 0 && e.length > 1 && clave === 'c_tas') { txt = '< ' + e[1][0]; }
+      else if (!e[i + 1]) { txt = '≥ ' + t[0]; }
+      else { txt = t[0] + '–' + e[i + 1][0]; }
+      html += '<div><span class="sw" style="background:' + t[1] + '"></span>' + txt + ' ' + c.unidad + '</div>';
+    });
+    html += '<small>Media de 32 miembros del CFSv2 (NOAA/NCEP, NMME), rejilla de 1°. ' +
+      'Emisión: ' + etiquetaMes(ccsrDatos.emision) + '. Usa la línea de tiempo o el selector «Mes».</small>' +
+      '<small>Graphics provided by the International Research Institute for Climate and Society, ' +
+      'Columbia University (CCSR/IRI).</small>';
+    return html;
+  }
+
+  function mostrarCcsr(clave) {
+    // Mes por defecto: el que contiene la fecha de hoy (o el primero del pronóstico)
+    if (ccsrMes === null) { ccsrMes = indiceMesDesdeFecha(Date.now()); }
+    const ini = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[0]));
+    const fin = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[NL - 1] + 30 * 86400000));
+    viewer.clock.startTime = ini.clone();
+    viewer.clock.stopTime = fin.clone();
+    viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
+    viewer.clock.shouldAnimate = false;
+    viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[ccsrMes] + 15 * 86400000));
+    timelineEl.style.display = 'block';
+    viewer.timeline.zoomTo(ini, fin);
+    viewer.timeline.resize();
+    boxMes.style.display = 'flex';
+    selMes.value = String(ccsrMes);
+    leyendaNoaa.innerHTML = leyendaCcsr(clave);
+    leyendaNoaa.style.display = 'block';
+    dibujarCcsr(clave, ccsrMes);
+  }
+
+  // Línea de tiempo: al arrastrarla cambia el mes mostrado
+  viewer.timeline.addEventListener('settime', function (e) {
+    const sel = selCapa.value;
+    if (!ccsrDatos || !CCSR[sel]) { return; }
+    const ms = Cesium.JulianDate.toDate(e.timeJulian).getTime();
+    const idx = indiceMesDesdeFecha(ms);
+    if (idx !== ccsrMes) {
+      ccsrMes = idx;
+      selMes.value = String(idx);
+      dibujarCcsr(sel, idx);
+    }
+    viewer.scene.requestRender();
+  }, false);
 
   // Lluvia / viento: pronóstico diario del GFS (NOAA) en rejilla de 1°, servido por Open-Meteo
   const fuenteGfs = new Cesium.CustomDataSource('gfs');
@@ -360,10 +569,23 @@ CESIUM_HTML_TEMPLATE = """
     fuenteGfs.entities.removeAll();
     boxDia.style.display = 'none';
     boxFecha.style.display = 'none';
+    boxMes.style.display = 'none';
+    timelineEl.style.display = 'none';
+    fuenteCcsr.entities.removeAll();
     quitarModis();
     setEstado('');
     if (sel === 'none') {
       leyendaNoaa.style.display = 'none';
+    } else if (CCSR[sel]) {
+      setEstado('Cargando pronóstico CCSR/IRI (CFSv2)…');
+      cargarCcsr().then(function () {
+        if (selCapa.value !== sel) { return; }
+        setEstado('');
+        mostrarCcsr(sel);
+      }).catch(function (e) {
+        setEstado('No se pudo obtener el pronóstico CCSR/IRI (' + e.message + '). Reintenta en unos segundos.');
+        ccsrDatos = null;
+      });
     } else if (MODIS[sel]) {
       boxFecha.style.display = 'flex';
       ponerModis(sel);
@@ -393,6 +615,13 @@ CESIUM_HTML_TEMPLATE = """
   }
 
   selCapa.onchange = aplicarCapaNoaa;
+  selMes.onchange = function () {
+    const sel = selCapa.value;
+    if (!ccsrDatos || !CCSR[sel]) { return; }
+    ccsrMes = parseInt(selMes.value, 10);
+    viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[ccsrMes] + 15 * 86400000));
+    dibujarCcsr(sel, ccsrMes);
+  };
   inpFecha.onchange = function () {
     if (MODIS[selCapa.value] && inpFecha.value) { ponerModis(selCapa.value); }
   };
@@ -622,6 +851,7 @@ st.sidebar.caption(
     "Topografía: © colaboradores de OpenStreetMap  \n"
     "Imagen: © Esri, Maxar, Earthstar Geographics  \n"
     "Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST  \n"
+    "Pronóstico estacional: CCSR/IRI, Columbia Climate School (CFSv2 de NOAA/NCEP)  \n"
     "Satélite: NASA GIBS / MODIS  \n"
     "Perfil de Ecuador: geoBoundaries (CC0)  \n"
     "Visor: CesiumJS"
