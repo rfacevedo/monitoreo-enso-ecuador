@@ -221,6 +221,10 @@ CESIUM_HTML_TEMPLATE = """
   const capaOSM = viewer.imageryLayers.addImageryProvider(
     new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }));
 
+  // Opacidad de los mapas base: 80 % (deja ver un poco el fondo y resalta las capas encima)
+  const OPACIDAD_BASE = 0.8;
+  [capaEsri, capaTopo, capaOSM].forEach(function (l) { l.alpha = OPACIDAD_BASE; });
+
   function setBase(base) {
     capaOSM.show = base === 'osm';
     capaTopo.show = base === 'topo';
@@ -935,7 +939,7 @@ df_original = pd.DataFrame(data_points)
 # 4. INTERFAZ LATERAL (FILTROS)
 # ==========================================
 st.sidebar.markdown(
-    '<p class="titulo-lateral">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>',
+    '<p class="titulo-lateral">⛈️ Sistema de Alerta Temprana y Riesgo de Inundación (ENSO)</p>',
     unsafe_allow_html=True,
 )
 st.sidebar.header("⚙️ Filtros por fechas de inundación")
