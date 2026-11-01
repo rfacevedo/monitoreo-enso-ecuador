@@ -595,6 +595,13 @@ fecha_inicio = st.sidebar.date_input("Fecha Inicial", datetime.date(2026, 11, 1)
 fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2, 1))
 umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
+st.sidebar.markdown(
+    '<p style="margin-top:6px;">Autor: <b>Raúl Acevedo</b><br>'
+    '<a href="https://www.linkedin.com/in/raul-acevedo-5aba97441/" target="_blank" '
+    'rel="noopener noreferrer" style="color:#7DD3FC !important;">LinkedIn</a></p>',
+    unsafe_allow_html=True,
+)
+
 st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Cesium")
 st.sidebar.caption("El cambio de mapa base (Esri / OSM) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
