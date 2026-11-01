@@ -141,20 +141,16 @@ CESIUM_HTML_TEMPLATE = """
     </select>
   </div>
   <div class="grupo" id="boxMes" style="display:none">
-    <label for="selMes">Mes</label>
+    <label for="selMes" id="lblMes">Mes</label>
     <select id="selMes"></select>
   </div>
   <div class="grupo" id="boxTiempo">
-    <button id="btnPlay" type="button" title="Reproducir meses" aria-label="Reproducir meses">&#9654;</button>
+    <button id="btnPlay" type="button" title="Reproducir" aria-label="Reproducir">&#9654;</button>
     <div id="slotTimeline"></div>
   </div>
   <div class="grupo" id="boxFecha" style="display:none">
     <label for="inpFecha">Fecha</label>
     <input type="date" id="inpFecha">
-  </div>
-  <div class="grupo" id="boxDia" style="display:none">
-    <label for="selDia">Día</label>
-    <select id="selDia"></select>
   </div>
   <div class="grupo"><button id="btnHome">Inicio</button></div>
   <span id="estado"></span>
@@ -246,24 +242,56 @@ CESIUM_HTML_TEMPLATE = """
     nubes: { url: 'https://nowcoast.noaa.gov/geoserver/satellite/wms',
              layers: 'global_water_vapor_imagery_mosaic', alpha: 0.65,
              credit: 'NOAA GOES / nowCOAST',
-             leyenda: '<b>Vapor de agua (GOES)</b>Más claro/blanco = más humedad y nubosidad en altura.<small>Satélite NOAA, mosaico global casi en tiempo real.</small>' },
+             titulo: 'Hora', span: 3600000, intervalo: 2000,
+             etiqueta: function (ms) { const i = new Date(ms).toISOString(); return i.slice(5, 10) + ' ' + i.slice(11, 16) + ' UTC'; },
+             leyenda: '<b>Vapor de agua (GOES)</b>Más claro/blanco = más humedad y nubosidad en altura.<small>Satélite NOAA, mosaico global; imágenes de las últimas horas (usa la línea de tiempo).</small>' },
     sst:   { url: 'https://nowcoast.noaa.gov/geoserver/sea_surface_temperature/wms',
              layers: 'global_sea_surface_temperature', alpha: 0.7,
              credit: 'NOAA GFS / nowCOAST',
-             leyenda: '<b>Temp. superficie del mar</b>Colores cálidos = agua más caliente (clave para El Niño).<small>Modelo GFS de NOAA, vía nowCOAST.</small>' }
+             titulo: 'Día', span: 86400000, intervalo: 2500,
+             etiqueta: function (ms) { return new Date(ms).toISOString().slice(0, 10); },
+             leyenda: '<b>Temp. superficie del mar</b>Colores cálidos = agua más caliente (clave para El Niño).<small>Modelo GFS de NOAA, vía nowCOAST; últimos días disponibles (usa la línea de tiempo).</small>' }
   };
-  const capasWms = {};
-  Object.keys(WMS).forEach(function (k) {
-    const c = WMS[k];
-    const l = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
-      url: c.url, layers: c.layers,
-      parameters: { transparent: true, format: 'image/png' },
-      credit: c.credit
+  // Una sola capa WMS activa; se recrea con el parámetro TIME al moverse por la línea de tiempo
+  let capaWms = null;
+  const tiemposWms = {};     // clave -> promesa con la lista de instantes [ms] del servicio
+  function quitarWms() {
+    if (capaWms) { viewer.imageryLayers.remove(capaWms, true); capaWms = null; }
+  }
+  function ponerWms(clave, iso) {
+    quitarWms();
+    const c = WMS[clave];
+    const params = { transparent: true, format: 'image/png' };
+    if (iso) { params.time = iso; }
+    capaWms = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+      url: c.url, layers: c.layers, parameters: params, credit: c.credit
     }));
-    l.alpha = c.alpha;
-    l.show = false;
-    capasWms[k] = l;
-  });
+    capaWms.alpha = c.alpha;
+    viewer.scene.requestRender();
+  }
+  // Lee del GetCapabilities los instantes disponibles (dimensión TIME) de la capa
+  function cargarTiemposWms(clave) {
+    if (tiemposWms[clave]) { return tiemposWms[clave]; }
+    const c = WMS[clave];
+    tiemposWms[clave] = fetch(c.url + '?service=WMS&version=1.3.0&request=GetCapabilities').then(function (r) {
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      return r.text();
+    }).then(function (txt) {
+      const xml = new DOMParser().parseFromString(txt, 'text/xml');
+      const capa = Array.from(xml.getElementsByTagName('Layer')).find(function (l) {
+        const n = Array.from(l.children).find(function (h) { return h.tagName === 'Name'; });
+        return n && n.textContent === c.layers;
+      });
+      const dim = capa && Array.from(capa.children).find(function (h) {
+        return h.tagName === 'Dimension' && h.getAttribute('name') === 'time';
+      });
+      if (!dim) { return []; }
+      return dim.textContent.split(',').map(function (t) { return Date.parse(t.trim()); })
+        .filter(function (v) { return !isNaN(v); }).sort(function (x, y) { return x - y; });
+    });
+    tiemposWms[clave].catch(function () { delete tiemposWms[clave]; });
+    return tiemposWms[clave];
+  }
 
   // Satélite MODIS (Terra) vía NASA GIBS: teselas diarias, se recrean al cambiar la fecha
   const MODIS = {
@@ -467,69 +495,95 @@ CESIUM_HTML_TEMPLATE = """
     return html;
   }
 
-  // Reproducción automática de los meses (botón ▶ / ⏸ junto a la línea de tiempo)
+  // ===== Motor de tiempo común: línea de tiempo de Cesium + selector + reproducción ▶/❚❚ =====
+  // Lo usan CCSR/IRI (meses), GFS (días), MODIS (días) y los WMS de NOAA (horas / días).
   const btnPlay = document.getElementById('btnPlay');
-  let ccsrTimer = null;
-  function irAMes(i) {
-    const sel = selCapa.value;
-    if (!ccsrDatos || !CCSR[sel]) { return; }
-    ccsrMes = i;
-    selMes.value = String(i);
-    viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[i] + 15 * 86400000));
-    dibujarCcsr(sel, i);
-  }
-  function detenerCcsr() {
-    if (ccsrTimer) { clearInterval(ccsrTimer); ccsrTimer = null; }
-    btnPlay.innerHTML = '&#9654;';
-    btnPlay.title = 'Reproducir meses';
-    btnPlay.setAttribute('aria-label', 'Reproducir meses');
-  }
-  btnPlay.onclick = function () {
-    if (ccsrTimer) { detenerCcsr(); return; }
-    btnPlay.innerHTML = '&#10074;&#10074;';
-    btnPlay.title = 'Pausar';
-    btnPlay.setAttribute('aria-label', 'Pausar');
-    if (ccsrMes >= NL - 1) { irAMes(0); }
-    ccsrTimer = setInterval(function () {
-      if (!ccsrDatos || !CCSR[selCapa.value]) { detenerCcsr(); return; }
-      irAMes((ccsrMes + 1) % NL);   // al llegar a jul-2027 vuelve a oct-2026
-    }, 2500);
-  };
+  const lblTiempo = document.getElementById('lblMes');
+  let tiempo = null;        // {titulo, fechas:[ms], idx, span, intervalo, etiqueta(ms), render(i), selector}
+  let timerTiempo = null;
 
-  function mostrarCcsr(clave) {
-    // Mes por defecto: el que contiene la fecha de hoy (o el primero del pronóstico)
-    if (ccsrMes === null) { ccsrMes = indiceMesDesdeFecha(Date.now()); }
-    const ini = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[0]));
-    const fin = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[NL - 1] + 30 * 86400000));
+  function detenerTiempo() {
+    if (timerTiempo) { clearInterval(timerTiempo); timerTiempo = null; }
+    btnPlay.innerHTML = '&#9654;';
+    btnPlay.title = 'Reproducir';
+    btnPlay.setAttribute('aria-label', 'Reproducir');
+  }
+  function quitarTiempo() {
+    detenerTiempo();
+    tiempo = null;
+    boxMes.style.display = 'none';
+    boxTiempo.style.display = 'none';
+    timelineEl.style.display = 'none';
+  }
+  function indiceTiempo(ms) {
+    let idx = 0;
+    tiempo.fechas.forEach(function (f, i) { if (f <= ms) { idx = i; } });
+    return idx;
+  }
+  function irAIndice(i, desdeTimeline) {
+    if (!tiempo) { return; }
+    tiempo.idx = i;
+    selMes.value = String(i);
+    if (!desdeTimeline) {
+      viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(tiempo.fechas[i] + tiempo.span / 2));
+    }
+    tiempo.render(i);
+    viewer.scene.requestRender();
+  }
+  function iniciarTiempo(cfg) {
+    detenerTiempo();
+    tiempo = cfg;
+    const n = cfg.fechas.length;
+    lblTiempo.textContent = cfg.titulo;
+    selMes.innerHTML = '';
+    cfg.fechas.forEach(function (ms, i) {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = cfg.etiqueta(ms);
+      selMes.appendChild(o);
+    });
+    const ini = Cesium.JulianDate.fromDate(new Date(cfg.fechas[0]));
+    const fin = Cesium.JulianDate.fromDate(new Date(cfg.fechas[n - 1] + cfg.span));
     viewer.clock.startTime = ini.clone();
     viewer.clock.stopTime = fin.clone();
     viewer.clock.clockRange = Cesium.ClockRange.CLAMPED;
     viewer.clock.shouldAnimate = false;
-    viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[ccsrMes] + 15 * 86400000));
     boxTiempo.style.display = 'flex';
     timelineEl.style.display = 'block';
     viewer.timeline.zoomTo(ini, fin);
     viewer.timeline.resize();
-    boxMes.style.display = 'flex';
-    selMes.value = String(ccsrMes);
-    leyendaNoaa.innerHTML = leyendaCcsr(clave);
-    leyendaNoaa.style.display = 'block';
-    dibujarCcsr(clave, ccsrMes);
+    boxMes.style.display = cfg.selector === false ? 'none' : 'flex';
+    irAIndice(Math.min(Math.max(cfg.idx, 0), n - 1));
   }
-
-  // Línea de tiempo: al arrastrarla cambia el mes mostrado
+  btnPlay.onclick = function () {
+    if (timerTiempo) { detenerTiempo(); return; }
+    if (!tiempo) { return; }
+    btnPlay.innerHTML = '&#10074;&#10074;';
+    btnPlay.title = 'Pausar';
+    btnPlay.setAttribute('aria-label', 'Pausar');
+    timerTiempo = setInterval(function () {
+      if (!tiempo) { detenerTiempo(); return; }
+      irAIndice((tiempo.idx + 1) % tiempo.fechas.length);   // al llegar al final vuelve al inicio
+    }, tiempo.intervalo);
+  };
+  // Línea de tiempo: al arrastrarla cambia el instante mostrado
   viewer.timeline.addEventListener('settime', function (e) {
-    const sel = selCapa.value;
-    if (!ccsrDatos || !CCSR[sel]) { return; }
-    const ms = Cesium.JulianDate.toDate(e.timeJulian).getTime();
-    const idx = indiceMesDesdeFecha(ms);
-    if (idx !== ccsrMes) {
-      ccsrMes = idx;
-      selMes.value = String(idx);
-      dibujarCcsr(sel, idx);
-    }
+    if (!tiempo) { return; }
+    const idx = indiceTiempo(Cesium.JulianDate.toDate(e.timeJulian).getTime());
+    if (idx !== tiempo.idx) { irAIndice(idx, true); }
     viewer.scene.requestRender();
   }, false);
+
+  function mostrarCcsr(clave) {
+    // Mes por defecto: el que contiene la fecha de hoy (o el primero del pronóstico)
+    if (ccsrMes === null) { ccsrMes = indiceMesDesdeFecha(Date.now()); }
+    leyendaNoaa.innerHTML = leyendaCcsr(clave);
+    leyendaNoaa.style.display = 'block';
+    iniciarTiempo({
+      titulo: 'Mes', fechas: ccsrDatos.meses, idx: ccsrMes, span: 30 * 86400000, intervalo: 2500,
+      etiqueta: etiquetaMes,
+      render: function (i) { ccsrMes = i; dibujarCcsr(clave, i); }
+    });
+  }
 
   // Lluvia / viento: pronóstico diario del GFS (NOAA) en rejilla de 1°, servido por Open-Meteo
   const fuenteGfs = new Cesium.CustomDataSource('gfs');
@@ -560,13 +614,6 @@ CESIUM_HTML_TEMPLATE = """
     }).then(function (j) {
       const arr = Array.isArray(j) ? j : [j];
       gfs = arr.map(function (o, i) { return { lat: lats[i], lon: lons[i], daily: o.daily }; });
-      const selDia = document.getElementById('selDia');
-      selDia.innerHTML = '';
-      gfs[0].daily.time.forEach(function (t, i) {
-        const o = document.createElement('option');
-        o.value = i; o.textContent = (i === 0 ? 'Hoy ' : '') + t;
-        selDia.appendChild(o);
-      });
       return gfs;
     });
   }
@@ -640,22 +687,17 @@ CESIUM_HTML_TEMPLATE = """
   }
 
   const leyendaNoaa = document.getElementById('leyendaNoaa');
-  const boxDia = document.getElementById('boxDia');
   const selCapa = document.getElementById('selCapa');
-  const selDia = document.getElementById('selDia');
+  const fechaIso = function (ms) { return new Date(ms).toISOString().slice(0, 10); };
 
   function aplicarCapaNoaa() {
     const sel = selCapa.value;
-    Object.keys(capasWms).forEach(function (k) { capasWms[k].show = (k === sel); });
-    fuenteGfs.entities.removeAll();
-    boxDia.style.display = 'none';
-    boxFecha.style.display = 'none';
-    boxMes.style.display = 'none';
-    timelineEl.style.display = 'none';
-    boxTiempo.style.display = 'none';
-    detenerCcsr();
-    fuenteCcsr.entities.removeAll();
+    quitarTiempo();
+    quitarWms();
     quitarModis();
+    fuenteGfs.entities.removeAll();
+    fuenteCcsr.entities.removeAll();
+    boxFecha.style.display = 'none';
     setEstado('');
     if (sel === 'none') {
       leyendaNoaa.style.display = 'none';
@@ -670,25 +712,53 @@ CESIUM_HTML_TEMPLATE = """
         ccsrDatos = null;
       });
     } else if (MODIS[sel]) {
+      // Línea de tiempo diaria: los últimos 30 días disponibles de GIBS
       boxFecha.style.display = 'flex';
-      ponerModis(sel);
-      leyendaNoaa.innerHTML = MODIS[sel].leyenda + '<small>NASA GIBS, satélite Terra. Se actualiza a diario con 1–3 días de retraso.</small>';
+      leyendaNoaa.innerHTML = MODIS[sel].leyenda + '<small>NASA GIBS, satélite Terra. Se actualiza a diario con 1–3 días de retraso. Usa la línea de tiempo o el campo Fecha.</small>';
       leyendaNoaa.style.display = 'block';
+      const hoy0 = Date.parse(fechaIso(Date.now()) + 'T00:00:00Z');
+      const fechas = [];
+      for (let k = 30; k >= 1; k--) { fechas.push(hoy0 - k * 86400000); }
+      inpFecha.min = fechaIso(fechas[0]);
+      iniciarTiempo({
+        titulo: 'Día', selector: false, fechas: fechas, idx: fechas.length - 2, span: 86400000, intervalo: 3000,
+        etiqueta: fechaIso,
+        render: function (i) { inpFecha.value = fechaIso(fechas[i]); ponerModis(sel); }
+      });
     } else if (WMS[sel]) {
-      leyendaNoaa.innerHTML = WMS[sel].leyenda;
+      const c = WMS[sel];
+      leyendaNoaa.innerHTML = c.leyenda;
       leyendaNoaa.style.display = 'block';
+      ponerWms(sel);                      // de inmediato, la imagen más reciente
+      setEstado('Leyendo los instantes disponibles de NOAA…');
+      cargarTiemposWms(sel).then(function (fechas) {
+        if (selCapa.value !== sel) { return; }
+        setEstado('');
+        if (!fechas.length) { return; }   // sin dimensión de tiempo: se queda la última imagen
+        iniciarTiempo({
+          titulo: c.titulo, fechas: fechas, idx: fechas.length - 1, span: c.span, intervalo: c.intervalo,
+          etiqueta: c.etiqueta,
+          render: function (i) { ponerWms(sel, new Date(fechas[i]).toISOString()); }
+        });
+      }).catch(function () {
+        if (selCapa.value === sel) { setEstado('No se pudo leer la línea de tiempo de NOAA; se muestra la última imagen.'); }
+      });
     } else {
-      // lluvia o viento
+      // lluvia o viento (GFS, 7 días)
       leyendaNoaa.innerHTML = sel === 'lluvia'
-        ? leyendaEscala('Lluvia del día (GFS)', ESCALA_LLUVIA, 'mm', 'Modelo GFS de NOAA, rejilla de 1° (vía Open-Meteo). Sin color = menos de 1 mm.')
-        : leyendaEscala('Viento máx. del día (GFS)', ESCALA_VIENTO, 'km/h', 'La flecha apunta hacia donde sopla el viento. Modelo GFS de NOAA, rejilla de 1° (vía Open-Meteo).');
+        ? leyendaEscala('Lluvia del día (GFS)', ESCALA_LLUVIA, 'mm', 'Modelo GFS de NOAA, rejilla de 1° (vía Open-Meteo). Sin color = menos de 1 mm. Usa la línea de tiempo.')
+        : leyendaEscala('Viento máx. del día (GFS)', ESCALA_VIENTO, 'km/h', 'La flecha apunta hacia donde sopla el viento. Modelo GFS de NOAA, rejilla de 1° (vía Open-Meteo). Usa la línea de tiempo.');
       leyendaNoaa.style.display = 'block';
       setEstado('Cargando pronóstico NOAA GFS…');
       cargarGfs().then(function () {
         if (selCapa.value !== sel) { return; }
-        boxDia.style.display = 'flex';
         setEstado('');
-        dibujarGfs(sel, parseInt(selDia.value || '0', 10));
+        const fechas = gfs[0].daily.time.map(function (t) { return Date.parse(t + 'T00:00:00Z'); });
+        iniciarTiempo({
+          titulo: 'Día', fechas: fechas, idx: 0, span: 86400000, intervalo: 2000,
+          etiqueta: fechaIso,
+          render: function (i) { dibujarGfs(sel, i); }
+        });
       }).catch(function () {
         setEstado('No se pudo obtener el pronóstico GFS. Reintenta en unos segundos.');
         gfs = null;
@@ -699,15 +769,13 @@ CESIUM_HTML_TEMPLATE = """
 
   selCapa.onchange = aplicarCapaNoaa;
   selMes.onchange = function () {
-    irAMes(parseInt(selMes.value, 10));
+    irAIndice(parseInt(selMes.value, 10));
   };
   inpFecha.onchange = function () {
-    if (MODIS[selCapa.value] && inpFecha.value) { ponerModis(selCapa.value); }
-  };
-  selDia.onchange = function () {
-    if (gfs && (selCapa.value === 'lluvia' || selCapa.value === 'viento')) {
-      dibujarGfs(selCapa.value, parseInt(selDia.value, 10));
-    }
+    const sel = selCapa.value;
+    if (!MODIS[sel] || !inpFecha.value) { return; }
+    const i = tiempo ? tiempo.fechas.indexOf(Date.parse(inpFecha.value + 'T00:00:00Z')) : -1;
+    if (i >= 0) { irAIndice(i); } else { ponerModis(sel); }   // fuera de la ventana: solo cambia la capa
   };
 
   // ---- Puntos de riesgo ----
