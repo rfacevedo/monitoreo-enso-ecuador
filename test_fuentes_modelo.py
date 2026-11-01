@@ -30,6 +30,16 @@ class PruebasLectores(unittest.TestCase):
         self.assertAlmostEqual(r["nino12"], 5.2)
         self.assertAlmostEqual(r["nino34"], 3.4)
 
+    def test_nino_semanal_con_valores_negativos_pegados(self):
+        # La Niña: las anomalías negativas van pegadas al valor anterior; la última fila no se puede saltar
+        texto = (" Week          SST SSTA     SST SSTA     SST SSTA     SST SSTA\n"
+                 " 02SEP1981     20.6-0.1     24.8-0.1     26.5-0.2     28.3-0.3\n"
+                 " 11NOV2026     24.1-1.2     25.0-0.9     26.4-1.1     28.0-0.6\n")
+        r = fd.parsear_nino_semanal(texto)
+        self.assertEqual(r["semana"], datetime.date(2026, 11, 11))
+        self.assertAlmostEqual(r["nino12"], -1.2)
+        self.assertAlmostEqual(r["nino34"], -1.1)
+
     def test_erfen(self):
         r = fd.parsear_erfen(ERFEN_TEXTO)
         self.assertEqual(r["informe"], "011-2026")

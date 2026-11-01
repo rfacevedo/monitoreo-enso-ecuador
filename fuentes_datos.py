@@ -92,16 +92,20 @@ def parsear_oni(texto):
 
 
 def parsear_nino_semanal(texto):
-    """Última semana: SST y anomalía de Niño 1+2, 3, 3.4 y 4."""
-    patron = re.compile(r"^\s*(\d{2}[A-Z]{3}\d{4})" + r"\s+(-?\d+\.\d+)" * 8 + r"\s*$")
+    """Última semana: SST y anomalía de Niño 1+2, 3, 3.4 y 4.
+
+    El archivo es de ancho fijo y los valores negativos van pegados al anterior (``20.6-0.1``),
+    por eso se extraen con una expresión que no exige espacios entre números.
+    """
+    fila = re.compile(r"^\s*(\d{2}[A-Z]{3}\d{4})\s+((?:-?\d+\.\d\s*){8})\s*$")
     ultima = None
     for linea in texto.splitlines():
-        m = patron.match(linea)
+        m = fila.match(linea)
         if m:
             ultima = m
     if not ultima:
         raise ValueError("Niño semanal: sin filas")
-    v = [float(x) for x in ultima.groups()[1:]]
+    v = [float(x) for x in re.findall(r"-?\d+\.\d", ultima.group(2))]
     fecha = datetime.datetime.strptime(ultima.group(1).title(), "%d%b%Y").date()
     return {"semana": fecha, "nino12": v[1], "nino3": v[3], "nino34": v[5], "nino4": v[7], "url": URL_NINO_SEMANAL}
 
