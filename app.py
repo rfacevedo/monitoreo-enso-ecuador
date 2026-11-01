@@ -110,7 +110,8 @@ CESIUM_HTML_TEMPLATE = """
 <div class="toolbar">
   <div class="grupo" id="grpBase">
     <button id="btnEsri" class="activo">Imagen (Esri)</button>
-    <button id="btnOSM">Topográfico (OSM)</button>
+    <button id="btnTopo">Topográfico (OSM)</button>
+    <button id="btnOSM">Base (OSM)</button>
   </div>
   <div class="grupo">
     <label for="selCapa">Capa</label>
@@ -208,13 +209,24 @@ CESIUM_HTML_TEMPLATE = """
       maximumLevel: 19,
       credit: 'Imagen © Esri, Maxar, Earthstar Geographics'
     }));
+  // Topográfico (OSM): OpenTopoMap, mapa topográfico con curvas de nivel hecho con datos de OpenStreetMap
+  const capaTopo = viewer.imageryLayers.addImageryProvider(
+    new Cesium.UrlTemplateImageryProvider({
+      url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      subdomains: ['a', 'b', 'c'],
+      maximumLevel: 17,
+      credit: 'Topografía © colaboradores de OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)'
+    }));
+  // Base (OSM): capa estándar de OpenStreetMap
   const capaOSM = viewer.imageryLayers.addImageryProvider(
     new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }));
 
   function setBase(base) {
     capaOSM.show = base === 'osm';
+    capaTopo.show = base === 'topo';
     capaEsri.show = base === 'esri';
     document.getElementById('btnOSM').classList.toggle('activo', base === 'osm');
+    document.getElementById('btnTopo').classList.toggle('activo', base === 'topo');
     document.getElementById('btnEsri').classList.toggle('activo', base === 'esri');
     viewer.scene.requestRender();
   }
@@ -775,6 +787,7 @@ CESIUM_HTML_TEMPLATE = """
     });
   }
 
+  document.getElementById('btnTopo').onclick = function () { setBase('topo'); };
   document.getElementById('btnOSM').onclick = function () { setBase('osm'); };
   document.getElementById('btnEsri').onclick = function () { setBase('esri'); };
   document.getElementById('btnHome').onclick = function () { irAInicio(1.2); };
@@ -939,10 +952,11 @@ st.sidebar.markdown(
 
 st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Geográfico")
-st.sidebar.caption("El cambio de mapa base (Esri / OSM) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
+st.sidebar.caption("El cambio de mapa base (Esri / Topográfico / Base OSM) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
 st.sidebar.caption(
     "**Fuentes y créditos**  \n"
-    "Topografía: © colaboradores de OpenStreetMap  \n"
+    "Base: © colaboradores de OpenStreetMap  \n"
+    "Topografía: © colaboradores de OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)  \n"
     "Imagen: © Esri, Maxar, Earthstar Geographics  \n"
     "Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST  \n"
     "Pronóstico estacional: CCSR/IRI, Columbia Climate School (CFSv2 de NOAA/NCEP)  \n"
