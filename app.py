@@ -90,7 +90,7 @@ CESIUM_HTML_TEMPLATE = """
   #grpVista button { padding: 7px 0; min-width: 40px; font-size: 14px; }
   #grpVista button + button { border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
   /* Controles del pronóstico mensual (▶ + línea de tiempo), en la barra superior izquierda */
-  #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; }
+  #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; margin-left: 50px; }  /* libra la columna Vista */
   #btnPlay { width: 34px; height: 34px; border: 0; background: #2563EB; color: #fff; cursor: pointer;
     font-size: 14px; line-height: 1; padding: 0; margin-right: 8px; }
   #btnPlay:hover { background: #1D4ED8; }
