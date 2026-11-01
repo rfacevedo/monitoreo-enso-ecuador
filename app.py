@@ -134,8 +134,8 @@ CESIUM_HTML_TEMPLATE = """
     z-index: 12; width: min(680px, calc(100% - 480px)); min-width: 280px; align-items: center; padding: 0 8px 0 0; }
   /* Ventanas estrechas: la barra sube sobre los créditos de Cesium y ocupa casi todo el ancho */
   @media (max-width: 760px) {
-    #boxTiempo { bottom: 40px; width: calc(100% - 20px); min-width: 0; }
-    .leyenda { bottom: 84px; }
+    #boxTiempo { bottom: 58px; width: calc(100% - 20px); min-width: 0; }
+    .leyenda { bottom: 102px; }
   }
   #btnPlay { flex: 0 0 auto; width: 34px; height: 34px; border: 0; background: #2563EB; color: #fff; cursor: pointer;
     font-size: 14px; line-height: 1; padding: 0; margin-right: 8px; }
