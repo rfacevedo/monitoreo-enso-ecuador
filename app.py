@@ -6,7 +6,9 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
-CESIUM_VERSION = "1.114.0"
+# Se fija 1.105.2: desde 1.113 los workers son módulos ES y el navegador los bloquea
+# al cargarse desde un CDN dentro del iframe de Streamlit (el globo queda vacío).
+CESIUM_VERSION = "1.105.2"
 CESIUM_CDN = f"https://cdn.jsdelivr.net/npm/cesium@{CESIUM_VERSION}/Build/Cesium"
 
 COLORES_ALERTA = {
@@ -51,6 +53,7 @@ CESIUM_HTML_TEMPLATE = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>window.CESIUM_BASE_URL = "__CDN__/";</script>
 <script src="__CDN__/Cesium.js"></script>
 <link href="__CDN__/Widgets/widgets.css" rel="stylesheet">
 <style>
@@ -371,3 +374,4 @@ df_tabla = (
     .reset_index(drop=True)
 )
 st.dataframe(df_tabla.style.apply(estilo_filas_alertas, axis=1), use_container_width=True, hide_index=True)
+
