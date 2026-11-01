@@ -1010,6 +1010,15 @@ st.markdown(
         font-size: 20px !important; font-weight: bold !important; line-height: 1.3 !important;
         color: #FFFFFF !important; margin-bottom: 12px !important;
     }
+    /* Botón «Actualizar datos»: azul claro (antes blanco) con texto azul marino */
+    [data-testid="stSidebar"] .stButton button, [data-testid="stSidebar"] [data-testid^="stBaseButton"] {
+        background-color: #7DD3FC !important; border: 1px solid #38BDF8 !important; color: #1D3557 !important;
+        font-weight: 700 !important;
+    }
+    [data-testid="stSidebar"] .stButton button:hover, [data-testid="stSidebar"] [data-testid^="stBaseButton"]:hover {
+        background-color: #BAE6FD !important; border-color: #7DD3FC !important; color: #1D3557 !important;
+    }
+    [data-testid="stSidebar"] .stButton button p, [data-testid="stSidebar"] [data-testid^="stBaseButton"] p { color: #1D3557 !important; }
     [data-testid="stSidebar"] .panel-enso { font-size: 13px; line-height: 1.55; }
     [data-testid="stSidebar"] .panel-enso small { color: #CBD5E1; }
     </style>
@@ -1110,10 +1119,10 @@ except Exception:  # noqa: BLE001
 # 4. INTERFAZ LATERAL (FILTROS)
 # ==========================================
 st.sidebar.markdown(
-    '<p class="titulo-lateral">⛈️ Sistema de Alerta Temprana y Riesgo de Inundación (ENSO)</p>',
+    '<p class="titulo-lateral">⛈️ Sistema de Alerta Temprana y Riesgo de Inundación (ENSO) Costa Ecuatoriana</p>',
     unsafe_allow_html=True,
 )
-st.sidebar.header("⚙️ Filtros por fechas de inundación")
+st.sidebar.header("⚙️ Filtros por fechas de probable inundación")
 def _recalcular_proyeccion():
     """Al cambiar la fecha inicial, la proyección vuelve a ser un mes después."""
     st.session_state["fecha_fin"] = sumar_un_mes(st.session_state["fecha_inicio"])
@@ -1131,10 +1140,19 @@ fecha_fin = st.sidebar.date_input(
 )
 umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
+LOGO_LINKEDIN = (
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="#0A66C2" aria-hidden="true" '
+    'style="vertical-align:middle;margin-right:7px;background:#FFFFFF;border-radius:4px;padding:1px;">'
+    '<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414'
+    'v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 '
+    '2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 '
+    '1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>'
+)
 st.sidebar.markdown(
     '<p style="margin-top:6px;">Autor: <b>Raúl Acevedo</b><br>'
     '<a href="https://www.linkedin.com/in/raul-acevedo-76360130/" target="_blank" '
-    'rel="noopener noreferrer" style="color:#7DD3FC !important;">LinkedIn</a></p>',
+    'rel="noopener noreferrer" style="color:#7DD3FC !important;text-decoration:none;">'
+    + LOGO_LINKEDIN + 'LinkedIn</a></p>',
     unsafe_allow_html=True,
 )
 
