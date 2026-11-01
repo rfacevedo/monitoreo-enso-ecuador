@@ -1,8 +1,10 @@
+import base64
 import calendar
 import datetime
 import html
 import importlib
 import json
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -1148,11 +1150,28 @@ LOGO_LINKEDIN = (
     '2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 '
     '1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>'
 )
+def foto_autor_base64():
+    """Foto de perfil del autor (archivo del repositorio) en base64; None si no está."""
+    try:
+        return base64.b64encode(Path(__file__).with_name("foto_autor.jpg").read_bytes()).decode()
+    except OSError:
+        return None
+
+
+URL_LINKEDIN = "https://www.linkedin.com/in/raul-acevedo-76360130/"
+_foto = foto_autor_base64()
+_avatar = (
+    f'<a href="{URL_LINKEDIN}" target="_blank" rel="noopener noreferrer" title="Perfil de LinkedIn">'
+    f'<img src="data:image/jpeg;base64,{_foto}" alt="Raúl Acevedo" '
+    'style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #7DD3FC;display:block;"></a>'
+    if _foto else ""
+)
 st.sidebar.markdown(
-    '<p style="margin-top:6px;">Autor: <b>Raúl Acevedo</b><br>'
-    '<a href="https://www.linkedin.com/in/raul-acevedo-76360130/" target="_blank" '
-    'rel="noopener noreferrer" style="color:#7DD3FC !important;text-decoration:none;">'
-    + LOGO_LINKEDIN + 'LinkedIn</a></p>',
+    '<div style="display:flex;align-items:center;gap:12px;margin-top:6px;">'
+    + _avatar +
+    '<div style="line-height:1.5;">Autor: <b>Raúl Acevedo</b><br>'
+    f'<a href="{URL_LINKEDIN}" target="_blank" rel="noopener noreferrer" '
+    'style="color:#7DD3FC !important;text-decoration:none;">' + LOGO_LINKEDIN + 'LinkedIn</a></div></div>',
     unsafe_allow_html=True,
 )
 
