@@ -136,6 +136,18 @@ class PruebasAlmacen(unittest.TestCase):
         finally:
             fd._get = original
 
+    def test_evolucion_con_marcas_de_tiempo_de_formatos_mixtos(self):
+        """Falló en la nube: marcas con y sin microsegundos hacían fallar pd.to_datetime y rompían la página."""
+        import pandas as pd
+        reg = [{"canton": "Guayaquil", "fecha": datetime.date(2026, 11, 2), "riesgo": 0.5, "alerta": "BAJO",
+                "lluvia_mm": 1.0, "mar_cm": 0.0, "horizonte": "GFS · día"}]
+        almacen.guardar_riesgo(datetime.datetime(2026, 11, 1, 20, 49, 32, 123456, tzinfo=datetime.timezone.utc), reg)
+        almacen.guardar_riesgo(datetime.datetime(2026, 11, 1, 23, 51, 21, tzinfo=datetime.timezone.utc), reg)
+        evo = pd.DataFrame(almacen.leer_evolucion_riesgo())
+        momentos = pd.to_datetime(evo["descarga_utc"], format="ISO8601", utc=True).dt.tz_convert("America/Guayaquil")
+        self.assertEqual(len(momentos), 2)
+        self.assertEqual(momentos.iloc[1].hour, 18)                       # 23:51 UTC = 18:51 en Ecuador
+
     def test_respaldo_desde_sqlite_si_se_pierde_la_memoria(self):
         fd.con_respaldo("erfen_prueba", lambda: {"informe": "011-2026"})
         fd._ULTIMO_BUENO.clear()                                       # reinicio del proceso

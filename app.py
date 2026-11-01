@@ -1513,7 +1513,8 @@ with st.expander("📈 Histórico del ENSO y evolución del riesgo (almacén SQL
 
     n_fotos = evolucion["descarga_utc"].nunique() if not evolucion.empty else 0
     if n_fotos >= 2:
-        evolucion["momento"] = pd.to_datetime(evolucion["descarga_utc"]).dt.tz_convert("America/Guayaquil")
+        # Las fotos guardadas pueden tener formatos ISO distintos (con y sin microsegundos): se leen todas como ISO 8601
+        evolucion["momento"] = pd.to_datetime(evolucion["descarga_utc"], format="ISO8601", utc=True).dt.tz_convert("America/Guayaquil")
         fig_e = go.Figure()
         for canton_nombre, g in evolucion.groupby("canton"):
             fig_e.add_trace(go.Scatter(x=g["momento"], y=g["riesgo_max"] * 100, name=canton_nombre, mode="lines+markers"))
