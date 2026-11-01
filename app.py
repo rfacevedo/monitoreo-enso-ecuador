@@ -80,6 +80,7 @@ CESIUM_HTML_TEMPLATE = """
     border-radius: 8px; display: none; }
   .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(10,25,47,.9);
     color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.7; }
+  #grpVista button { padding: 8px 11px; min-width: 32px; font-size: 14px; }
   /* Controles del pronóstico mensual (▶ + línea de tiempo), en la barra superior izquierda */
   #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; }
   #btnPlay { width: 34px; height: 34px; border: 0; background: #2563EB; color: #fff; cursor: pointer;
@@ -146,6 +147,16 @@ CESIUM_HTML_TEMPLATE = """
     <select id="selDia"></select>
   </div>
   <div class="grupo"><button id="btnHome">Inicio</button></div>
+  <div class="grupo" id="grpVista">
+    <label>Vista</label>
+    <button id="vInclinar" type="button" title="Inclinar: ver más horizonte" aria-label="Inclinar">&#9650;</button>
+    <button id="vEnderezar" type="button" title="Enderezar: ver desde arriba" aria-label="Enderezar">&#9660;</button>
+    <button id="vGirarIzq" type="button" title="Girar a la izquierda" aria-label="Girar a la izquierda">&#10226;</button>
+    <button id="vGirarDer" type="button" title="Girar a la derecha" aria-label="Girar a la derecha">&#10227;</button>
+    <button id="vZoomMas" type="button" title="Acercar" aria-label="Acercar">+</button>
+    <button id="vZoomMenos" type="button" title="Alejar" aria-label="Alejar">&minus;</button>
+    <button id="vNorte" type="button" title="Norte arriba y vista cenital" aria-label="Norte arriba">N</button>
+  </div>
   <span id="estado"></span>
 </div>
 <div class="leyenda" id="leyenda"></div>
@@ -763,6 +774,41 @@ CESIUM_HTML_TEMPLATE = """
   document.getElementById('btnOSM').onclick = function () { setBase('osm'); };
   document.getElementById('btnEsri').onclick = function () { setBase('esri'); };
   document.getElementById('btnHome').onclick = function () { irAInicio(1.2); };
+
+  // ---- Controles de vista: inclinar, girar, acercar y norte ----
+  // Cesium no trae botones de inclinación en su núcleo; se orbita alrededor del punto
+  // del terreno que está en el centro de la pantalla.
+  const PASO = Cesium.Math.toRadians(10);
+  function centroPantalla() {
+    const c = viewer.scene.canvas;
+    const rayo = viewer.camera.getPickRay(new Cesium.Cartesian2(c.clientWidth / 2, c.clientHeight / 2));
+    return rayo ? viewer.scene.globe.pick(rayo, viewer.scene) : undefined;
+  }
+  function orbitar(dHeading, dPitch) {
+    const objetivo = centroPantalla();
+    if (!objetivo) { return; }
+    const cam = viewer.camera;
+    const rango = Cesium.Cartesian3.distance(cam.positionWC, objetivo);
+    const pitch = Cesium.Math.clamp(cam.pitch + dPitch, Cesium.Math.toRadians(-90), Cesium.Math.toRadians(-15));
+    cam.lookAt(objetivo, new Cesium.HeadingPitchRange(cam.heading + dHeading, pitch, rango));
+    cam.lookAtTransform(Cesium.Matrix4.IDENTITY);   // suelta la cámara para que siga libre
+    viewer.scene.requestRender();
+  }
+  function zoomVista(factor) {
+    const altura = viewer.camera.positionCartographic.height;
+    if (factor > 0) { viewer.camera.zoomIn(altura * factor); } else { viewer.camera.zoomOut(altura * -factor); }
+    viewer.scene.requestRender();
+  }
+  document.getElementById('vInclinar').onclick = function () { orbitar(0, PASO); };
+  document.getElementById('vEnderezar').onclick = function () { orbitar(0, -PASO); };
+  document.getElementById('vGirarIzq').onclick = function () { orbitar(-PASO, 0); };
+  document.getElementById('vGirarDer').onclick = function () { orbitar(PASO, 0); };
+  document.getElementById('vZoomMas').onclick = function () { zoomVista(0.35); };
+  document.getElementById('vZoomMenos').onclick = function () { zoomVista(-0.35); };
+  document.getElementById('vNorte').onclick = function () {
+    // Norte arriba y mirando desde arriba, sin mover el centro de la vista
+    orbitar(-viewer.camera.heading, Cesium.Math.toRadians(-90) - viewer.camera.pitch);
+  };
 
   // ---- Estado inicial ----
   setBase('esri');
