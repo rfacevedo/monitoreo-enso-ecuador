@@ -85,7 +85,8 @@ class PruebasModelo(unittest.TestCase):
     def test_enso_amplifica_y_tope(self):
         c = self.cantón("Babahoyo")
         self.assertLess(mr.calcular_riesgo(c, 0.4, 0, 0.0), mr.calcular_riesgo(c, 0.4, 0, 1.0))
-        self.assertEqual(mr.calcular_riesgo(c, 1.0, 100, 1.0), 1.0)
+        peor = mr.calcular_riesgo(c, 1.0, 100, 1.0)      # todo saturado: cerca del máximo y nunca > 1
+        self.assertTrue(0.95 <= peor <= 1.0, peor)
 
     def test_mar_solo_en_costeros(self):
         erfen = {"_estado": "ok", "nivel_mar_cm": 40.0, "nivel_mar_local": {"esmeraldas": 50.0}}
@@ -109,6 +110,32 @@ class PruebasModelo(unittest.TestCase):
         # solo entra de CFSv2 el mes posterior al horizonte diario (15-dic); 15-oct es pasado y 15-nov cae dentro de GFS
         self.assertEqual({r["fecha"] for r in regs if r["horizonte"] == "CFSv2 · mes"}, {datetime.date(2026, 12, 15)})
         self.assertTrue(all(0.0 <= r["riesgo"] <= 1.0 for r in regs))
+
+    def test_lluvia_local_normaliza_por_canton(self):
+        clima = {"cantones": {
+            "Guayaquil": {"dia_p50": 6.0, "dia_p99": 90.0, "d3_p50": 18.0, "d3_p99": 170.0,
+                          "mes": {"3": {"p50": 100.0, "p95": 400.0}}},
+            "Machala": {"dia_p50": 4.0, "dia_p99": 64.0, "d3_p50": 10.0, "d3_p99": 97.0, "mes": {}},
+        }}
+        gye, mch = self.cantón("Guayaquil"), self.cantón("Machala")
+        # 50 mm en un día: más extremo en Machala (zona más seca) que en Guayaquil
+        self.assertGreater(mr.s_lluvia_dia(mch, 50, 50, clima), mr.s_lluvia_dia(gye, 50, 50, clima))
+        self.assertEqual(mr.s_lluvia_dia(gye, 3, 3, clima), 0.0)          # lluvia típica -> 0
+        self.assertEqual(mr.s_lluvia_dia(gye, 120, 120, clima), 1.0)      # por encima del P99 -> 1
+        # mediana 100 y P95 400: el P95 vale 0,5 (saturación en 100 + 2·300 = 700 mm)
+        self.assertAlmostEqual(mr.s_lluvia_mes(gye, 3, 400, clima), 0.5)
+        self.assertEqual(mr.s_lluvia_mes(gye, 3, 700, clima), 1.0)
+        self.assertEqual(mr.s_lluvia_mes(gye, 3, 80, clima), 0.0)
+        # sin estadística del mes -> umbral de respaldo
+        self.assertAlmostEqual(mr.s_lluvia_mes(mch, 3, mr.LLUVIA_MES_MM / 2, clima), 0.5)
+        # sin climatología -> umbrales de respaldo
+        self.assertAlmostEqual(mr.s_lluvia_dia(gye, mr.LLUVIA_DIA_MM / 2, 0, {}), 0.5)
+
+    def test_sin_lluvia_el_mar_no_dispara_alerta(self):
+        # techo con ENSO máximo y mar de 50-60 cm pero sin lluvia: nunca pasa de BAJO
+        for c in mr.CANTONES:
+            r = mr.calcular_riesgo(c, 0.0, 60.0 if c["costero"] else 0.0, 1.0)
+            self.assertEqual(mr.nivel_alerta(r, c["amenaza"]) in ("BAJO",), True, (c["canton"], r))
 
     def test_sin_fuentes_no_rompe(self):
         regs, enso = mr.construir_registros({}, hoy=datetime.date(2026, 11, 1))

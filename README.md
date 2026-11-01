@@ -16,14 +16,19 @@ Proyecto GeoCiencias — Mentor: Raúl Acevedo.
 | INOCAR | Informe técnico ejecutivo ERFEN vigente (PDF): nivel del mar, desbordamientos | `fuentes_datos.py` |
 | CIIFEN | Boletín mensual «El Niño/La Niña en América Latina» (PDF) | `fuentes_datos.py` |
 
-- **Modelo de riesgo por cantón** (`modelo_riesgo.py`): combina lluvia, nivel del mar y exposición, amplificados por
-  el estado ENSO. Es un modelo **indicativo**: no sustituye los boletines oficiales (INAMHI, SNGR, ERFEN). Sus pesos y
-  umbrales son una primera calibración y deben ser revisados.
+- **Modelo de riesgo por cantón** (`modelo_riesgo.py`): combina lluvia, nivel del mar y exposición; el estado ENSO
+  refuerza la lluvia hasta un 15 %. Es un modelo **indicativo**: no sustituye los boletines oficiales (INAMHI, SNGR, ERFEN).
+- **Calibración** (`climatologia.json`, generado con `generar_climatologia.py`): la lluvia se compara con el **clima propio
+  de cada cantón y de cada producto** (GFS archivado 2022-2025 para los días; CFSv2 archivado 2011-2026 para los meses),
+  no con un umbral único. Los umbrales de alerta se fijaron por frecuencia: con ENSO neutro, ~11 días/año de alerta amarilla
+  y ~4-5 de alto riesgo; sin lluvia, el nivel del mar y la exposición no pasan de «bajo». Los pesos no se han contrastado con
+  daños reales (no hay registros de impacto): pendiente de revisión con INAMHI/SNGR.
 
 ## Archivos
 - `app.py` — interfaz Streamlit y visor Cesium.
 - `fuentes_datos.py` — lectores de las fuentes (con respaldo del último dato bueno si una fuente falla).
 - `modelo_riesgo.py` — catálogo de cantones, parámetros y cálculo del riesgo.
+- `climatologia.json` — estadísticas locales de lluvia (se regenera con `python generar_climatologia.py`, ~30 min).
 - `ecuador_perfil.py` — contorno de Ecuador (geoBoundaries, CC0).
 - `test_fuentes_modelo.py` — pruebas sin red: `python -m unittest test_fuentes_modelo -v`.
 

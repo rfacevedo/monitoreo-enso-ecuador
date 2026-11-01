@@ -1070,7 +1070,7 @@ def panel_enso_html(datos, indice_enso):
         lineas.append("🔴 <b>CIIFEN</b> no disponible")
     lluvia = f"{_punto(datos.get('gfs'))} NOAA GFS (16 días) · {_punto(datos.get('cfsv2'))} CFSv2 (10 meses)"
     lineas.append(f"<b>Lluvia</b>: {lluvia}")
-    lineas.append(f"<b>Índice ENSO del modelo</b>: {indice_enso:.2f} (amplifica el riesgo hasta +{ENSO_MAX_AMPLIFICACION * 100:.0f} %)")
+    lineas.append(f"<b>Índice ENSO del modelo</b>: {indice_enso:.2f} (refuerza la lluvia hasta +{ENSO_MAX_AMPLIFICACION * 100:.0f} %)")
     try:
         hora = datos["_cargado"].astimezone(ZoneInfo("America/Guayaquil")).strftime("%d-%m-%Y %H:%M")
     except Exception:
@@ -1226,20 +1226,25 @@ with st.expander("ℹ️ Cómo se calcula el riesgo (modelo indicativo)"):
         f"""
 **El riesgo (0 a 100 %)** de cada cantón combina datos en vivo de tres fuentes:
 
-`riesgo = (peso_lluvia · lluvia + peso_mar · nivel del mar + peso_exposición · exposición) × (1 + {ENSO_MAX_AMPLIFICACION:.2f} · índice ENSO)`
+`riesgo = peso_lluvia · lluvia × (1 + {ENSO_MAX_AMPLIFICACION:.2f} · índice ENSO) + peso_mar · nivel del mar + peso_exposición · exposición`
 
 | Amenaza | Lluvia | Nivel del mar | Exposición |
 |---|---|---|---|
 | Inundación | {wi['lluvia']:.0%} | {wi['mar']:.0%} | {wi['expo']:.0%} (baja elevación) |
 | Deslave | {wd['lluvia']:.0%} | {wd['mar']:.0%} | {wd['expo']:.0%} (pendiente supuesta) |
 
-- **Lluvia:** NOAA GFS por día (16 días) y CFSv2 por mes (hasta 10 meses), contra umbrales de 60 mm/día,
-  120 mm en 3 días y 450 mm/mes.
+- **Lluvia:** NOAA GFS por día (16 días) y CFSv2 por mes (hasta 10 meses), comparadas con el **clima propio de cada
+  cantón**: 0 = lluvia típica (mediana) y 1 = lluvia extrema (percentil 99 de los días lluviosos; para los meses, el doble del
+  exceso que marca el percentil 95 de ese mes del año).
+  Así Santa Elena (seca) y Babahoyo (muy lluviosa) no se miden con la misma vara.
 - **Nivel del mar:** anomalía publicada en el informe ERFEN de INOCAR, solo para cantones costeros.
 - **Índice ENSO:** promedio del ONI (NOAA CPC, saturado en 2 °C) y de la anomalía semanal de Niño 1+2
   (saturada en 4 °C).
 - **Alertas:** crítico desde {UMBRALES['critico']:.0%}, alto riesgo desde {UMBRALES['alto']:.0%}, alerta amarilla desde
-  {UMBRALES['amarilla']:.0%}; en deslave, «medio» desde {UMBRALES['deslave_medio']:.0%}; por debajo, bajo.
+  {UMBRALES['amarilla']:.0%}; en deslave, «medio» desde {UMBRALES['deslave_medio']:.0%}; por debajo, bajo. Calibrados por frecuencia:
+  con ENSO neutro, la alerta amarilla aparece ~11 días al año y «alto riesgo» ~4-5; con las condiciones actuales de El Niño
+  esas cifras se duplican y aparece «crítico» en cantones con nivel del mar alto. Sin lluvia, el nivel del mar
+  y la exposición nunca pasan de «bajo».
 
 **Importante:** es un modelo sencillo y **no sustituye** los boletines oficiales de INAMHI, SNGR ni del Comité ERFEN.
 Los pesos y umbrales (archivo `modelo_riesgo.py`) son una primera calibración y deben ser revisados.
