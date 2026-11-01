@@ -1,6 +1,7 @@
 import calendar
 import datetime
 import html
+import importlib
 import json
 from zoneinfo import ZoneInfo
 
@@ -10,8 +11,16 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import fuentes_datos
+import modelo_riesgo
 from ecuador_perfil import ECUADOR_PERFIL
-from modelo_riesgo import CANTONES, PESOS, UMBRALES, ENSO_MAX_AMPLIFICACION, construir_registros
+
+# Streamlit Cloud no recarga los módulos propios cuando se actualiza el repositorio (solo vuelve a ejecutar app.py),
+# y la app seguía usando el modelo anterior. Se recargan aquí; se conserva el «último dato bueno» de las fuentes.
+_ultimo_bueno = dict(fuentes_datos._ULTIMO_BUENO)
+importlib.reload(fuentes_datos)
+fuentes_datos._ULTIMO_BUENO.update(_ultimo_bueno)
+importlib.reload(modelo_riesgo)
+from modelo_riesgo import CANTONES, PESOS, UMBRALES, ENSO_MAX_AMPLIFICACION, construir_registros  # noqa: E402
 
 # Se fija 1.105.2: desde 1.113 los workers son módulos ES y el navegador los bloquea
 # al cargarse desde un CDN dentro del iframe de Streamlit (el globo queda vacío).
