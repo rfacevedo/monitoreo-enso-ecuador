@@ -59,18 +59,30 @@ CESIUM_HTML_TEMPLATE = """
 <style>
   html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
     font-family: -apple-system, 'Segoe UI', Arial, sans-serif; background: #0A192F; }
-  .toolbar { position: absolute; top: 10px; left: 10px; z-index: 10; display: flex; gap: 10px; flex-wrap: wrap; }
-  .grupo { display: flex; background: rgba(10,25,47,.92); border-radius: 8px; overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,.45); }
-  .grupo button { border: 0; background: transparent; color: #CBD5E1; padding: 8px 16px;
+  .toolbar { position: absolute; top: 10px; left: 10px; right: 90px; z-index: 10; display: flex; gap: 10px;
+    flex-wrap: wrap; align-items: center; }
+  .grupo { display: flex; align-items: center; background: rgba(10,25,47,.92); border-radius: 8px;
+    overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.45); }
+  .grupo button { border: 0; background: transparent; color: #CBD5E1; padding: 8px 14px;
     font-size: 13px; font-weight: 600; cursor: pointer; }
   .grupo button + button { border-left: 1px solid rgba(255,255,255,.15); }
   .grupo button:hover { background: rgba(255,255,255,.1); }
   .grupo button.activo { background: #2563EB; color: #fff; }
-  .leyenda { position: absolute; bottom: 34px; left: 10px; z-index: 10; background: rgba(10,25,47,.9);
+  .grupo label { color: #94A3B8; font-size: 12px; padding: 0 4px 0 12px; }
+  .grupo select { border: 0; background: transparent; color: #fff; font-size: 13px; font-weight: 600;
+    padding: 8px 10px 8px 4px; cursor: pointer; outline: none; }
+  .grupo select option { color: #000; }
+  #estado { color: #fff; font-size: 12px; background: rgba(10,25,47,.85); padding: 6px 10px;
+    border-radius: 8px; display: none; }
+  .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(10,25,47,.9);
     color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.7; }
+  #leyenda { left: 10px; }
+  #leyendaNoaa { right: 10px; display: none; max-width: 230px; }
   .leyenda i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px;
     border: 1px solid #fff; vertical-align: middle; }
+  .leyenda b { display: block; margin-bottom: 2px; }
+  .leyenda .sw { display: inline-block; width: 16px; height: 10px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+  .leyenda small { color: #94A3B8; display: block; line-height: 1.3; margin-top: 4px; }
   #aviso { display: none; position: absolute; inset: 0; z-index: 20; color: #fff; background: #0A192F;
     align-items: center; justify-content: center; text-align: center; padding: 24px; }
 </style>
@@ -79,23 +91,33 @@ CESIUM_HTML_TEMPLATE = """
 <div id="cesiumContainer"></div>
 <div id="aviso">Este navegador no admite WebGL, necesario para el visor Cesium.</div>
 <div class="toolbar">
-  <div class="grupo" id="grpDim">
-    <button id="btn2D">2D</button>
-    <button id="btn3D" class="activo">3D</button>
-  </div>
   <div class="grupo" id="grpBase">
-    <button id="btnOSM" class="activo">Topográfico (OSM)</button>
-    <button id="btnEsri">Imagen (Esri)</button>
+    <button id="btnEsri" class="activo">Imagen (Esri)</button>
+    <button id="btnOSM">Topográfico (OSM)</button>
+  </div>
+  <div class="grupo">
+    <label for="selCapa">Capa NOAA</label>
+    <select id="selCapa">
+      <option value="none">Ninguna</option>
+      <option value="lluvia">Lluvia pronosticada (GFS)</option>
+      <option value="viento">Viento pronosticado (GFS)</option>
+      <option value="nubes">Nubes / vapor de agua (GOES)</option>
+      <option value="sst">Temp. superficie del mar (GFS)</option>
+    </select>
+  </div>
+  <div class="grupo" id="boxDia" style="display:none">
+    <label for="selDia">Día</label>
+    <select id="selDia"></select>
   </div>
   <div class="grupo"><button id="btnHome">Inicio</button></div>
+  <span id="estado"></span>
 </div>
 <div class="leyenda" id="leyenda"></div>
+<div class="leyenda" id="leyendaNoaa"></div>
 <script>
 (function () {
   const PUNTOS = __PUNTOS__;
   const COLORES = __COLORES__;
-  const MODO_INICIAL = "__MODO__";
-  const BASE_INICIAL = "__BASE__";
 
   Cesium.Ion.defaultAccessToken = "";
 
@@ -106,7 +128,8 @@ CESIUM_HTML_TEMPLATE = """
       baseLayerPicker: false,
       geocoder: false,
       homeButton: false,
-      sceneModePicker: false,      // el botón 2D/3D propio lo reemplaza
+      sceneModePicker: false,      // solo vista 3D
+      scene3DOnly: true,
       navigationHelpButton: false,
       animation: false,
       timeline: false,
@@ -121,15 +144,15 @@ CESIUM_HTML_TEMPLATE = """
     return;
   }
 
-  // ---- Mapas base: OSM (topología) y Esri (imagen) ----
-  const capaOSM = viewer.imageryLayers.addImageryProvider(
-    new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }));
+  // ---- Mapas base: Esri (imagen, por defecto) y OSM (topografía) ----
   const capaEsri = viewer.imageryLayers.addImageryProvider(
     new Cesium.UrlTemplateImageryProvider({
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       maximumLevel: 19,
       credit: 'Imagen © Esri, Maxar, Earthstar Geographics'
     }));
+  const capaOSM = viewer.imageryLayers.addImageryProvider(
+    new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }));
 
   function setBase(base) {
     capaOSM.show = base === 'osm';
@@ -139,13 +162,189 @@ CESIUM_HTML_TEMPLATE = """
     viewer.scene.requestRender();
   }
 
+  // ---- Capas NOAA ----
+  // WMS directos de NOAA nowCOAST (globales). Lluvia y viento salen del modelo GFS de NOAA.
+  const WMS = {
+    nubes: { url: 'https://nowcoast.noaa.gov/geoserver/satellite/wms',
+             layers: 'global_water_vapor_imagery_mosaic', alpha: 0.65,
+             credit: 'NOAA GOES / nowCOAST',
+             leyenda: '<b>Vapor de agua (GOES)</b>Más claro/blanco = más humedad y nubosidad en altura.<small>Satélite NOAA, mosaico global casi en tiempo real.</small>' },
+    sst:   { url: 'https://nowcoast.noaa.gov/geoserver/sea_surface_temperature/wms',
+             layers: 'global_sea_surface_temperature', alpha: 0.7,
+             credit: 'NOAA GFS / nowCOAST',
+             leyenda: '<b>Temp. superficie del mar</b>Colores cálidos = agua más caliente (clave para El Niño).<small>Modelo GFS de NOAA, vía nowCOAST.</small>' }
+  };
+  const capasWms = {};
+  Object.keys(WMS).forEach(function (k) {
+    const c = WMS[k];
+    const l = viewer.imageryLayers.addImageryProvider(new Cesium.WebMapServiceImageryProvider({
+      url: c.url, layers: c.layers,
+      parameters: { transparent: true, format: 'image/png' },
+      credit: c.credit
+    }));
+    l.alpha = c.alpha;
+    l.show = false;
+    capasWms[k] = l;
+  });
+
+  // Lluvia / viento: pronóstico diario del GFS (NOAA) en rejilla de 1°, servido por Open-Meteo
+  const fuenteGfs = new Cesium.CustomDataSource('gfs');
+  viewer.dataSources.add(fuenteGfs);
+  const REJ = { latMin: -5, latMax: 1, lonMin: -82, lonMax: -77 };
+  let gfs = null;           // [{lat, lon, daily:{...}}]
+  let gfsCargando = false;
+  const estado = document.getElementById('estado');
+
+  function setEstado(txt) {
+    estado.textContent = txt || '';
+    estado.style.display = txt ? 'inline-block' : 'none';
+  }
+
+  function cargarGfs() {
+    if (gfs) { return Promise.resolve(gfs); }
+    const lats = [], lons = [];
+    for (let la = REJ.latMin; la <= REJ.latMax; la++) {
+      for (let lo = REJ.lonMin; lo <= REJ.lonMax; lo++) { lats.push(la); lons.push(lo); }
+    }
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lats.join(',') +
+      '&longitude=' + lons.join(',') +
+      '&daily=precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant' +
+      '&models=gfs_global&forecast_days=7&timezone=auto';
+    return fetch(url).then(function (r) {
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      return r.json();
+    }).then(function (j) {
+      const arr = Array.isArray(j) ? j : [j];
+      gfs = arr.map(function (o, i) { return { lat: lats[i], lon: lons[i], daily: o.daily }; });
+      const selDia = document.getElementById('selDia');
+      selDia.innerHTML = '';
+      gfs[0].daily.time.forEach(function (t, i) {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = (i === 0 ? 'Hoy ' : '') + t;
+        selDia.appendChild(o);
+      });
+      return gfs;
+    });
+  }
+
+  const ESCALA_LLUVIA = [
+    [1, '#A6D8F0'], [5, '#4FA3E0'], [15, '#2563EB'], [30, '#7C3AED'], [60, '#C026D3']
+  ];
+  const ESCALA_VIENTO = [
+    [0, '#38BDF8'], [10, '#22C55E'], [20, '#FACC15'], [30, '#F97316'], [45, '#EF4444']
+  ];
+  function colorEscala(esc, v) {
+    let c = esc[0][1];
+    for (let i = 0; i < esc.length; i++) { if (v >= esc[i][0]) { c = esc[i][1]; } }
+    return c;
+  }
+  function leyendaEscala(titulo, esc, unidad, nota) {
+    return '<b>' + titulo + '</b>' + esc.map(function (e, i) {
+      const sig = esc[i + 1] ? '–' + esc[i + 1][0] : '+';
+      return '<div><span class="sw" style="background:' + e[1] + '"></span>' + e[0] + sig + ' ' + unidad + '</div>';
+    }).join('') + '<small>' + nota + '</small>';
+  }
+
+  function dibujarGfs(tipo, dia) {
+    fuenteGfs.entities.removeAll();
+    gfs.forEach(function (p) {
+      const d = p.daily;
+      const lluvia = d.precipitation_sum[dia];
+      const vel = d.wind_speed_10m_max[dia];
+      const dir = d.wind_direction_10m_dominant[dia];
+      if (tipo === 'lluvia') {
+        if (lluvia === null || lluvia < 1) { return; }
+        const col = Cesium.Color.fromCssColorString(colorEscala(ESCALA_LLUVIA, lluvia));
+        fuenteGfs.entities.add({
+          name: 'Lluvia GFS ' + d.time[dia],
+          rectangle: {
+            coordinates: Cesium.Rectangle.fromDegrees(p.lon - 0.5, p.lat - 0.5, p.lon + 0.5, p.lat + 0.5),
+            material: col.withAlpha(0.55), height: 0
+          },
+          position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
+          label: {
+            text: Math.round(lluvia) + ' mm', font: '600 11px sans-serif',
+            fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK, outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE, scale: 0.9,
+            distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 1500000)
+          },
+          description: 'Precipitación acumulada del día: ' + lluvia + ' mm<br>Fecha: ' + d.time[dia] +
+            '<br>Punto de rejilla: ' + p.lat + '°, ' + p.lon + '°'
+        });
+      } else if (tipo === 'viento') {
+        if (vel === null) { return; }
+        const col = Cesium.Color.fromCssColorString(colorEscala(ESCALA_VIENTO, vel));
+        // La dirección meteorológica indica de dónde sopla; la flecha apunta hacia dónde va.
+        const rumbo = Cesium.Math.toRadians(dir + 180);
+        const largoKm = 25 + Math.min(vel, 50) * 1.4;
+        const dLat = largoKm * Math.cos(rumbo) / 111;
+        const dLon = largoKm * Math.sin(rumbo) / (111 * Math.cos(Cesium.Math.toRadians(p.lat)));
+        fuenteGfs.entities.add({
+          name: 'Viento GFS ' + d.time[dia],
+          position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray([p.lon, p.lat, p.lon + dLon, p.lat + dLat]),
+            width: 9,
+            material: new Cesium.PolylineArrowMaterialProperty(col)
+          },
+          description: 'Viento máximo del día: ' + vel + ' km/h<br>Sopla desde: ' + Math.round(dir) +
+            '°<br>Fecha: ' + d.time[dia] + '<br>Punto de rejilla: ' + p.lat + '°, ' + p.lon + '°'
+        });
+      }
+    });
+    viewer.scene.requestRender();
+  }
+
+  const leyendaNoaa = document.getElementById('leyendaNoaa');
+  const boxDia = document.getElementById('boxDia');
+  const selCapa = document.getElementById('selCapa');
+  const selDia = document.getElementById('selDia');
+
+  function aplicarCapaNoaa() {
+    const sel = selCapa.value;
+    Object.keys(capasWms).forEach(function (k) { capasWms[k].show = (k === sel); });
+    fuenteGfs.entities.removeAll();
+    boxDia.style.display = 'none';
+    setEstado('');
+    if (sel === 'none') {
+      leyendaNoaa.style.display = 'none';
+    } else if (WMS[sel]) {
+      leyendaNoaa.innerHTML = WMS[sel].leyenda;
+      leyendaNoaa.style.display = 'block';
+    } else {
+      // lluvia o viento
+      leyendaNoaa.innerHTML = sel === 'lluvia'
+        ? leyendaEscala('Lluvia del día (GFS)', ESCALA_LLUVIA, 'mm', 'Modelo GFS de NOAA, rejilla de 1° (vía Open-Meteo). Sin color = menos de 1 mm.')
+        : leyendaEscala('Viento máx. del día (GFS)', ESCALA_VIENTO, 'km/h', 'La flecha apunta hacia donde sopla el viento. Modelo GFS de NOAA, rejilla de 1° (vía Open-Meteo).');
+      leyendaNoaa.style.display = 'block';
+      setEstado('Cargando pronóstico NOAA GFS…');
+      cargarGfs().then(function () {
+        if (selCapa.value !== sel) { return; }
+        boxDia.style.display = 'flex';
+        setEstado('');
+        dibujarGfs(sel, parseInt(selDia.value || '0', 10));
+      }).catch(function () {
+        setEstado('No se pudo obtener el pronóstico GFS. Reintenta en unos segundos.');
+        gfs = null;
+      });
+    }
+    viewer.scene.requestRender();
+  }
+
+  selCapa.onchange = aplicarCapaNoaa;
+  selDia.onchange = function () {
+    if (gfs && (selCapa.value === 'lluvia' || selCapa.value === 'viento')) {
+      dibujarGfs(selCapa.value, parseInt(selDia.value, 10));
+    }
+  };
+
   // ---- Puntos de riesgo ----
   PUNTOS.forEach(function (p) {
     const color = Cesium.Color.fromCssColorString(COLORES[p.alerta] || '#FFA500');
     viewer.entities.add({
       name: p.canton,
       position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat),
-      // Área de influencia proporcional al riesgo (se dibuja pegada al suelo en 2D y 3D)
+      // Área de influencia proporcional al riesgo
       ellipse: {
         semiMajorAxis: 8000 + p.riesgo * 22000,
         semiMinorAxis: 8000 + p.riesgo * 22000,
@@ -185,57 +384,28 @@ CESIUM_HTML_TEMPLATE = """
     });
   });
 
-  // ---- Leyenda ----
+  // ---- Leyenda de alertas ----
   const usadas = Array.from(new Set(PUNTOS.map(function (p) { return p.alerta; })));
   document.getElementById('leyenda').innerHTML = usadas.map(function (a) {
     return '<div><i style="background:' + (COLORES[a] || '#FFA500') + '"></i>' + a + '</div>';
   }).join('');
 
   // ---- Cámara ----
-  const RECT_ECUADOR = Cesium.Rectangle.fromDegrees(-82.0, -5.2, -77.0, 1.2);
-
   function irAInicio(duracion) {
-    const d = duracion === undefined ? 1.5 : duracion;
-    if (viewer.scene.mode === Cesium.SceneMode.SCENE3D) {
-      viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(-79.6, -5.6, 560000),
-        orientation: { heading: 0, pitch: Cesium.Math.toRadians(-48), roll: 0 },
-        duration: d
-      });
-    } else {
-      viewer.camera.flyTo({ destination: RECT_ECUADOR, duration: d });
-    }
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(-79.6, -5.6, 560000),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-48), roll: 0 },
+      duration: duracion === undefined ? 1.5 : duracion
+    });
   }
 
-  // ---- Botón 2D / 3D ----
-  function setDimension(dim) {
-    const destino = dim === '2d' ? Cesium.SceneMode.SCENE2D : Cesium.SceneMode.SCENE3D;
-    if (viewer.scene.mode !== destino) {
-      if (dim === '2d') { viewer.scene.morphTo2D(1.2); } else { viewer.scene.morphTo3D(1.2); }
-    }
-    document.getElementById('btn2D').classList.toggle('activo', dim === '2d');
-    document.getElementById('btn3D').classList.toggle('activo', dim === '3d');
-  }
-  viewer.scene.morphComplete.addEventListener(function () {
-    irAInicio(0.8);
-    viewer.scene.requestRender();
-  });
-
-  document.getElementById('btn2D').onclick = function () { setDimension('2d'); };
-  document.getElementById('btn3D').onclick = function () { setDimension('3d'); };
   document.getElementById('btnOSM').onclick = function () { setBase('osm'); };
   document.getElementById('btnEsri').onclick = function () { setBase('esri'); };
   document.getElementById('btnHome').onclick = function () { irAInicio(1.2); };
 
   // ---- Estado inicial ----
-  setBase(BASE_INICIAL);
-  if (MODO_INICIAL === '2d') {
-    viewer.scene.morphTo2D(0);
-    document.getElementById('btn2D').classList.add('activo');
-    document.getElementById('btn3D').classList.remove('activo');
-  } else {
-    irAInicio(0);
-  }
+  setBase('esri');
+  irAInicio(0);
 })();
 </script>
 </body>
@@ -243,7 +413,7 @@ CESIUM_HTML_TEMPLATE = """
 """
 
 
-def render_cesium(df, base="osm", modo="3d", alto=560):
+def render_cesium(df, alto=560):
     puntos = [
         {
             "canton": r["canton"], "provincia": r["provincia"],
@@ -259,8 +429,6 @@ def render_cesium(df, base="osm", modo="3d", alto=560):
         .replace("__CDN__", CESIUM_CDN)
         .replace("__PUNTOS__", json.dumps(puntos, ensure_ascii=False))
         .replace("__COLORES__", json.dumps(COLORES_ALERTA, ensure_ascii=False))
-        .replace("__MODO__", modo)
-        .replace("__BASE__", base)
     )
     components.html(html, height=alto, scrolling=False)
 
@@ -320,7 +488,7 @@ umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
 st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Cesium")
-st.sidebar.caption("El botón 2D/3D y el cambio de mapa base (OSM / Esri) están dentro del visor.")
+st.sidebar.caption("El cambio de mapa base (Esri / OSM) y la capa de predicción NOAA (lluvia, viento) están dentro del visor.")
 
 df_filtrado = df_original[
     (df_original['fecha'] >= fecha_inicio) &
@@ -337,9 +505,9 @@ df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().res
 # ==========================================
 # 5. VISOR GEOGRÁFICO PRINCIPAL (CESIUM 2D/3D)
 # ==========================================
-st.subheader("📍 Visor Geográfico Interactivo (Cesium · 2D / 3D)")
-render_cesium(df_mapa_reciente, base="osm", modo="3d", alto=560)
-st.caption("Topografía: © colaboradores de OpenStreetMap · Imagen: © Esri, Maxar, Earthstar Geographics · Visor: CesiumJS")
+st.subheader("📍 Visor Geográfico Interactivo (Cesium 3D)")
+render_cesium(df_mapa_reciente, alto=560)
+st.caption("Topografía: © colaboradores de OpenStreetMap · Imagen: © Esri, Maxar, Earthstar Geographics · Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST · Visor: CesiumJS")
 
 # ==========================================
 # 6. INDICADORES, GRÁFICO Y TABLA
@@ -374,4 +542,3 @@ df_tabla = (
     .reset_index(drop=True)
 )
 st.dataframe(df_tabla.style.apply(estilo_filas_alertas, axis=1), use_container_width=True, hide_index=True)
-
