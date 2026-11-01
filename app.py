@@ -80,6 +80,10 @@ CESIUM_HTML_TEMPLATE = """
     border-radius: 8px; display: none; }
   .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(10,25,47,.9);
     color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.7; }
+  #btnPlay { display: none; position: absolute; left: 6px; bottom: 3px; z-index: 12; width: 28px;
+    height: 26px; border: 0; border-radius: 4px; background: #2563EB; color: #fff; cursor: pointer;
+    font-size: 13px; line-height: 1; padding: 0; }
+  #btnPlay:hover { background: #1D4ED8; }
   #leyenda { left: 10px; }
   #leyendaNoaa { right: 10px; display: none; max-width: 230px; }
   .leyenda i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px;
@@ -136,6 +140,7 @@ CESIUM_HTML_TEMPLATE = """
   <div class="grupo"><button id="btnHome">Inicio</button></div>
   <span id="estado"></span>
 </div>
+<button id="btnPlay" type="button" title="Reproducir meses" aria-label="Reproducir meses">&#9654;</button>
 <div class="leyenda" id="leyenda"></div>
 <div class="leyenda" id="leyendaNoaa"></div>
 <script>
@@ -416,6 +421,35 @@ CESIUM_HTML_TEMPLATE = """
     return html;
   }
 
+  // Reproducción automática de los meses (botón ▶ / ⏸ junto a la línea de tiempo)
+  const btnPlay = document.getElementById('btnPlay');
+  let ccsrTimer = null;
+  function irAMes(i) {
+    const sel = selCapa.value;
+    if (!ccsrDatos || !CCSR[sel]) { return; }
+    ccsrMes = i;
+    selMes.value = String(i);
+    viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[i] + 15 * 86400000));
+    dibujarCcsr(sel, i);
+  }
+  function detenerCcsr() {
+    if (ccsrTimer) { clearInterval(ccsrTimer); ccsrTimer = null; }
+    btnPlay.innerHTML = '&#9654;';
+    btnPlay.title = 'Reproducir meses';
+    btnPlay.setAttribute('aria-label', 'Reproducir meses');
+  }
+  btnPlay.onclick = function () {
+    if (ccsrTimer) { detenerCcsr(); return; }
+    btnPlay.innerHTML = '&#10074;&#10074;';
+    btnPlay.title = 'Pausar';
+    btnPlay.setAttribute('aria-label', 'Pausar');
+    if (ccsrMes >= NL - 1) { irAMes(0); }
+    ccsrTimer = setInterval(function () {
+      if (!ccsrDatos || !CCSR[selCapa.value]) { detenerCcsr(); return; }
+      irAMes((ccsrMes + 1) % NL);   // al llegar a jul-2027 vuelve a oct-2026
+    }, 1500);
+  };
+
   function mostrarCcsr(clave) {
     // Mes por defecto: el que contiene la fecha de hoy (o el primero del pronóstico)
     if (ccsrMes === null) { ccsrMes = indiceMesDesdeFecha(Date.now()); }
@@ -427,6 +461,8 @@ CESIUM_HTML_TEMPLATE = """
     viewer.clock.shouldAnimate = false;
     viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[ccsrMes] + 15 * 86400000));
     timelineEl.style.display = 'block';
+    timelineEl.style.left = '40px';      // deja sitio al botón de reproducir
+    btnPlay.style.display = 'block';
     viewer.timeline.zoomTo(ini, fin);
     viewer.timeline.resize();
     boxMes.style.display = 'flex';
@@ -571,6 +607,8 @@ CESIUM_HTML_TEMPLATE = """
     boxFecha.style.display = 'none';
     boxMes.style.display = 'none';
     timelineEl.style.display = 'none';
+    btnPlay.style.display = 'none';
+    detenerCcsr();
     fuenteCcsr.entities.removeAll();
     quitarModis();
     setEstado('');
@@ -616,11 +654,7 @@ CESIUM_HTML_TEMPLATE = """
 
   selCapa.onchange = aplicarCapaNoaa;
   selMes.onchange = function () {
-    const sel = selCapa.value;
-    if (!ccsrDatos || !CCSR[sel]) { return; }
-    ccsrMes = parseInt(selMes.value, 10);
-    viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ccsrDatos.meses[ccsrMes] + 15 * 86400000));
-    dibujarCcsr(sel, ccsrMes);
+    irAMes(parseInt(selMes.value, 10));
   };
   inpFecha.onchange = function () {
     if (MODIS[selCapa.value] && inpFecha.value) { ponerModis(selCapa.value); }
