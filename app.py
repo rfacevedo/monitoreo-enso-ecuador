@@ -579,6 +579,18 @@ data_points = [
     {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 290.0, "mar_cm": 40.0, "riesgo": 0.88, "alerta": "ALTO RIESGO", "lat": -2.20, "lon": -79.89, "fecha": datetime.date(2027, 1, 15)},
     {"canton": "Bucay", "provincia": "Guayas", "elevacion": 320.0, "lluvia_mm": 350.0, "mar_cm": 0.0, "riesgo": 0.55, "alerta": "MEDIO (DESLAVE)", "lat": -2.20, "lon": -79.13, "fecha": datetime.date(2027, 1, 15)},
     {"canton": "Machala", "provincia": "El Oro", "elevacion": 3.0, "lluvia_mm": 180.4, "mar_cm": 40.0, "riesgo": 0.75, "alerta": "ALTO RIESGO", "lat": -3.26, "lon": -79.96, "fecha": datetime.date(2027, 1, 15)},
+
+    # --- Provincias añadidas: Esmeraldas, Santa Elena y Santo Domingo de los Tsáchilas ---
+    # Valores de prueba (ilustrativos), igual que el resto de la tabla; reemplazar por datos reales.
+    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 230.0, "mar_cm": 30.0, "riesgo": 0.62, "alerta": "ALERTA AMARILLA", "lat": 0.96, "lon": -79.65, "fecha": datetime.date(2026, 11, 15)},
+    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 340.0, "mar_cm": 44.0, "riesgo": 0.87, "alerta": "ALTO RIESGO", "lat": 0.96, "lon": -79.65, "fecha": datetime.date(2026, 12, 15)},
+    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 300.0, "mar_cm": 38.0, "riesgo": 0.78, "alerta": "ALTO RIESGO", "lat": 0.96, "lon": -79.65, "fecha": datetime.date(2027, 1, 15)},
+    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 120.0, "mar_cm": 38.0, "riesgo": 0.52, "alerta": "ALERTA AMARILLA", "lat": -2.23, "lon": -80.86, "fecha": datetime.date(2026, 11, 15)},
+    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 260.0, "mar_cm": 50.0, "riesgo": 0.83, "alerta": "ALTO RIESGO", "lat": -2.23, "lon": -80.86, "fecha": datetime.date(2026, 12, 15)},
+    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 210.0, "mar_cm": 41.0, "riesgo": 0.72, "alerta": "ALTO RIESGO", "lat": -2.23, "lon": -80.86, "fecha": datetime.date(2027, 1, 15)},
+    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 240.0, "mar_cm": 0.0, "riesgo": 0.58, "alerta": "ALERTA AMARILLA", "lat": -0.25, "lon": -79.18, "fecha": datetime.date(2026, 11, 15)},
+    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 340.0, "mar_cm": 0.0, "riesgo": 0.74, "alerta": "ALTO RIESGO", "lat": -0.25, "lon": -79.18, "fecha": datetime.date(2026, 12, 15)},
+    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 360.0, "mar_cm": 0.0, "riesgo": 0.62, "alerta": "MEDIO (DESLAVE)", "lat": -0.25, "lon": -79.18, "fecha": datetime.date(2027, 1, 15)},
 ]
 
 df_original = pd.DataFrame(data_points)
