@@ -1163,7 +1163,7 @@ _foto = foto_autor_base64()
 _avatar = (
     f'<a href="{URL_LINKEDIN}" target="_blank" rel="noopener noreferrer" title="Perfil de LinkedIn">'
     f'<img src="data:image/jpeg;base64,{_foto}" alt="Raúl Acevedo" '
-    'style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #7DD3FC;display:block;"></a>'
+    'style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid #7DD3FC;display:block;"></a>'
     if _foto else ""
 )
 st.sidebar.markdown(
