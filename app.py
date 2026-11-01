@@ -1,5 +1,7 @@
+import calendar
 import datetime
 import json
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -1016,8 +1018,37 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 st.sidebar.header("⚙️ Filtros por fechas de inundación")
-fecha_inicio = st.sidebar.date_input("Fecha Inicial", datetime.date(2026, 11, 1))
-fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2, 1))
+def sumar_un_mes(fecha):
+    """Devuelve la misma fecha un mes después (ajusta el día si el mes siguiente es más corto)."""
+    anio = fecha.year + fecha.month // 12
+    mes = fecha.month % 12 + 1
+    dia = min(fecha.day, calendar.monthrange(anio, mes)[1])
+    return datetime.date(anio, mes, dia)
+
+
+def fecha_actual_ecuador():
+    """Fecha de hoy en hora de Ecuador (el servidor de Streamlit Cloud trabaja en UTC)."""
+    try:
+        return datetime.datetime.now(ZoneInfo("America/Guayaquil")).date()
+    except Exception:
+        return datetime.date.today()
+
+
+def _recalcular_proyeccion():
+    """Al cambiar la fecha inicial, la proyección vuelve a ser un mes después."""
+    st.session_state["fecha_fin"] = sumar_un_mes(st.session_state["fecha_inicio"])
+
+
+if "fecha_fin" not in st.session_state:
+    st.session_state["fecha_fin"] = sumar_un_mes(fecha_actual_ecuador())
+
+fecha_inicio = st.sidebar.date_input(
+    "Fecha Inicial", fecha_actual_ecuador(), key="fecha_inicio", on_change=_recalcular_proyeccion
+)
+fecha_fin = st.sidebar.date_input(
+    "Fecha de Proyección", key="fecha_fin",
+    help="Se calcula sola: un mes después de la fecha inicial. También puedes cambiarla a mano.",
+)
 umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
 st.sidebar.markdown(
