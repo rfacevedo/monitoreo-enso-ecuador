@@ -84,7 +84,11 @@ CESIUM_HTML_TEMPLATE = """
   #grpBase { flex-direction: column; align-items: stretch; }
   #grpBase button { text-align: left; }
   #grpBase button + button { border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
-  #grpVista button { padding: 8px 11px; min-width: 32px; font-size: 14px; }
+  /* Controles de vista: columna pegada al extremo izquierdo del visor, bajo los mapas base */
+  #grpVista { position: absolute; left: 0; top: 104px; flex-direction: column; align-items: stretch; }
+  #grpVista label { padding: 6px 0 4px; text-align: center; }
+  #grpVista button { padding: 7px 0; min-width: 40px; font-size: 14px; }
+  #grpVista button + button { border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
   /* Controles del pronóstico mensual (▶ + línea de tiempo), en la barra superior izquierda */
   #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; }
   #btnPlay { width: 34px; height: 34px; border: 0; background: #2563EB; color: #fff; cursor: pointer;
@@ -221,8 +225,8 @@ CESIUM_HTML_TEMPLATE = """
   const capaOSM = viewer.imageryLayers.addImageryProvider(
     new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' }));
 
-  // Opacidad de los mapas base: 80 % (deja ver un poco el fondo y resalta las capas encima)
-  const OPACIDAD_BASE = 0.8;
+  // Opacidad de los mapas base: 90 % (deja ver un poco el fondo y resalta las capas encima)
+  const OPACIDAD_BASE = 0.9;
   [capaEsri, capaTopo, capaOSM].forEach(function (l) { l.alpha = OPACIDAD_BASE; });
 
   function setBase(base) {
