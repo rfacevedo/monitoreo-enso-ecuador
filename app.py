@@ -447,7 +447,7 @@ CESIUM_HTML_TEMPLATE = """
     ccsrTimer = setInterval(function () {
       if (!ccsrDatos || !CCSR[selCapa.value]) { detenerCcsr(); return; }
       irAMes((ccsrMes + 1) % NL);   // al llegar a jul-2027 vuelve a oct-2026
-    }, 1500);
+    }, 2500);
   };
 
   function mostrarCcsr(clave) {
