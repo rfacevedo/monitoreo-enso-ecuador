@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
+from ecuador_perfil import ECUADOR_PERFIL
+
 # Se fija 1.105.2: desde 1.113 los workers son módulos ES y el navegador los bloquea
 # al cargarse desde un CDN dentro del iframe de Streamlit (el globo queda vacío).
 CESIUM_VERSION = "1.105.2"
@@ -446,11 +448,35 @@ CESIUM_HTML_TEMPLATE = """
     });
   });
 
+  // ---- Perfil de Ecuador: siempre visible, encima de cualquier mapa base o capa ----
+  // Dos líneas pegadas al suelo (halo oscuro + trazo amarillo) para que se vea
+  // sobre imagen satelital, OSM y capas semitransparentes. Ningún selector la oculta.
+  const PERFIL = __PERFIL__;
+  const fuentePerfil = new Cesium.CustomDataSource('perfil-ecuador');
+  viewer.dataSources.add(fuentePerfil);
+  PERFIL.forEach(function (anillo) {
+    const pos = Cesium.Cartesian3.fromDegreesArray(anillo);
+    pos.push(pos[0]);   // cierra el contorno
+    fuentePerfil.entities.add({
+      polyline: { positions: pos, width: 6, clampToGround: true,
+                  material: Cesium.Color.BLACK.withAlpha(0.55) }
+    });
+    fuentePerfil.entities.add({
+      name: 'Perfil de Ecuador',
+      polyline: { positions: pos, width: 3, clampToGround: true,
+                  material: Cesium.Color.fromCssColorString('#FFD60A') }
+    });
+  });
+  // Mantiene el perfil como última fuente de datos (se dibuja sobre las demás)
+  viewer.dataSources.raiseToTop(fuentePerfil);
+
   // ---- Leyenda de alertas ----
   const usadas = Array.from(new Set(PUNTOS.map(function (p) { return p.alerta; })));
   document.getElementById('leyenda').innerHTML = usadas.map(function (a) {
     return '<div><i style="background:' + (COLORES[a] || '#FFA500') + '"></i>' + a + '</div>';
-  }).join('');
+  }).join('') +
+    '<div><span style="display:inline-block;width:18px;height:0;border-top:3px solid #FFD60A;' +
+    'margin-right:6px;vertical-align:middle"></span>Perfil de Ecuador</div>';
 
   // ---- Cámara ----
   function irAInicio(duracion) {
@@ -491,6 +517,7 @@ def render_cesium(df, alto=560):
         .replace("__CDN__", CESIUM_CDN)
         .replace("__PUNTOS__", json.dumps(puntos, ensure_ascii=False))
         .replace("__COLORES__", json.dumps(COLORES_ALERTA, ensure_ascii=False))
+        .replace("__PERFIL__", json.dumps(ECUADOR_PERFIL, separators=(",", ":")))
     )
     components.html(html, height=alto, scrolling=False)
 
