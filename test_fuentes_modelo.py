@@ -3,10 +3,16 @@
 Ejecutar:  python -m unittest test_fuentes_modelo -v
 """
 import datetime
+import tempfile
 import unittest
+from pathlib import Path
 
+import almacen
 import fuentes_datos as fd
 import modelo_riesgo as mr
+
+# Las pruebas nunca tocan la base real: usan una SQLite temporal
+almacen.RUTA = Path(tempfile.mkdtemp()) / "prueba.sqlite"
 
 ERFEN_TEXTO = (
     "COMITÉ NACIONAL PARA EL ESTUDIO REGIONAL DEL FENÓMENO EL NIÑO INFORME TÉCNICO EJECUTIVO ERFEN Nro. 011-2026 "
@@ -70,6 +76,72 @@ class PruebasLectores(unittest.TestCase):
         r = fd.con_respaldo("prueba", lambda: 1 / 0)          # falla: devuelve el último bueno
         self.assertEqual((r["_estado"], r["x"]), ("respaldo", 1))
         self.assertEqual(fd.con_respaldo("otra", lambda: 1 / 0)["_estado"], "error")
+
+
+class PruebasAlmacen(unittest.TestCase):
+    def setUp(self):
+        almacen.RUTA = Path(tempfile.mkdtemp()) / "t.sqlite"
+        fd._ULTIMO_BUENO.clear()
+
+    def test_fuente_conserva_fechas_y_clave(self):
+        datos = {"emision": datetime.date(2026, 10, 1), "cantones": {"A": [(datetime.date(2026, 11, 1), 3.5)]}, "_estado": "ok"}
+        almacen.guardar_fuente("gfs", datos, clave="abc")
+        leido, edad = almacen.leer_fuente("gfs", "abc")
+        self.assertEqual(leido["emision"], datetime.date(2026, 10, 1))
+        self.assertEqual(leido["cantones"]["A"][0], [datetime.date(2026, 11, 1), 3.5])   # tupla -> lista, fecha intacta
+        self.assertNotIn("_estado", leido)
+        self.assertIsInstance(leido["_descargado"], datetime.datetime)
+        self.assertGreaterEqual(edad, 0)
+        self.assertEqual(almacen.leer_fuente("gfs", "otra-clave"), (None, None))        # catálogo distinto: no sirve
+        self.assertEqual(almacen.leer_fuente("no_existe"), (None, None))
+
+    def test_series_enso(self):
+        almacen.guardar_series_enso([(1998, "DJF", 2.2), (2026, "JAS", 2.16)], [("2026-10-21", 5.2, 4.3, 3.4, 1.1)])
+        almacen.guardar_series_enso([(2026, "JAS", 2.16)], [("2026-10-21", 5.2, 4.3, 3.4, 1.1)])   # repetir no duplica
+        self.assertEqual([f["anio"] for f in almacen.leer_oni(1990)], [1998, 2026])
+        self.assertEqual(len(almacen.leer_nino_semanal()), 1)
+
+    def test_historial_riesgo(self):
+        d1 = datetime.datetime(2026, 11, 1, 12, tzinfo=datetime.timezone.utc)
+        d2 = d1 + datetime.timedelta(hours=3)
+        reg = lambda r: [{"canton": "Guayaquil", "fecha": datetime.date(2026, 11, 2), "riesgo": r, "alerta": "BAJO",
+                          "lluvia_mm": 1.0, "mar_cm": 0.0, "horizonte": "GFS · día"},
+                         {"canton": "Guayaquil", "fecha": datetime.date(2026, 11, 3), "riesgo": r / 2, "alerta": "BAJO",
+                          "lluvia_mm": 1.0, "mar_cm": 0.0, "horizonte": "GFS · día"}]
+        self.assertTrue(almacen.guardar_riesgo(d1, reg(0.4)))
+        self.assertFalse(almacen.guardar_riesgo(d1, reg(0.9)))        # misma descarga: no se repite
+        self.assertTrue(almacen.guardar_riesgo(d2, reg(0.6)))
+        evo = almacen.leer_evolucion_riesgo()
+        self.assertEqual([round(e["riesgo_max"], 2) for e in evo], [0.4, 0.6])
+        self.assertEqual(almacen.resumen()["fotos_riesgo"], 2)
+
+    def test_respaldo_desde_sqlite_si_se_pierde_la_memoria(self):
+        fd.con_respaldo("erfen_prueba", lambda: {"informe": "011-2026"})
+        fd._ULTIMO_BUENO.clear()                                       # reinicio del proceso
+        r = fd.con_respaldo("erfen_prueba", lambda: 1 / 0)
+        self.assertEqual((r["_estado"], r["informe"]), ("respaldo", "011-2026"))
+
+    def test_arranque_rapido_no_descarga_si_hay_dato_reciente(self):
+        llamadas = []
+        originales = (fd.obtener_noaa_enso, fd.obtener_gfs, fd.obtener_cfsv2, fd.obtener_erfen, fd.obtener_ciifen)
+        try:
+            fd.obtener_noaa_enso = lambda: llamadas.append("noaa") or {"oni": {"anomalia": 2.0}, "semanal": {"nino12": 4.0}}
+            fd.obtener_gfs = lambda c: llamadas.append("gfs") or {"cantones": {}}
+            fd.obtener_cfsv2 = lambda c: llamadas.append("cfs") or {"cantones": {}}
+            fd.obtener_erfen = lambda: llamadas.append("erfen") or {"nivel_mar_cm": 40.0}
+            fd.obtener_ciifen = lambda: llamadas.append("ciifen") or {"estado": "x"}
+            primera = fd.cargar_todo(mr.CANTONES)
+            self.assertEqual(sorted(llamadas), ["cfs", "ciifen", "erfen", "gfs", "noaa"])
+            llamadas.clear()
+            segunda = fd.cargar_todo(mr.CANTONES)                      # todo reciente en SQLite: cero descargas
+            self.assertEqual(llamadas, [])
+            self.assertEqual(segunda["erfen"]["_origen"], "sqlite")
+            self.assertEqual(segunda["erfen"]["nivel_mar_cm"], 40.0)
+            fd.cargar_todo(mr.CANTONES, max_edad_s=-1)                 # caducado: vuelve a descargar
+            self.assertEqual(len(llamadas), 5)
+            self.assertEqual(primera["_cargado"], segunda["_cargado"])   # mismo momento: no se duplica la «foto» del riesgo
+        finally:
+            (fd.obtener_noaa_enso, fd.obtener_gfs, fd.obtener_cfsv2, fd.obtener_erfen, fd.obtener_ciifen) = originales
 
 
 class PruebasModelo(unittest.TestCase):

@@ -1,8 +1,8 @@
 """Conexión automática a las fuentes de datos: NOAA, INOCAR (ERFEN) y CIIFEN.
 
 Todas las funciones ``obtener_*`` hacen peticiones web y lanzan una excepción si fallan;
-``con_respaldo`` conserva el último dato bueno para no dejar la app sin información cuando
-una fuente se cae. Las funciones ``parsear_*`` son puras (texto -> datos) para poder probarlas
+``con_respaldo`` conserva el último dato bueno (en memoria y en SQLite, ver ``almacen.py``) para no dejar
+la app sin información cuando una fuente se cae, y ``cargar_todo`` reutiliza lo guardado si es reciente. Las funciones ``parsear_*`` son puras (texto -> datos) para poder probarlas
 sin red.
 
 Fuentes (verificadas desde el servidor):
@@ -14,12 +14,15 @@ Fuentes (verificadas desde el servidor):
 """
 
 import datetime
+import hashlib
 import io
 import re
 import struct
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
+
+import almacen
 
 UA = {"User-Agent": "Mozilla/5.0 (monitoreo-enso-ecuador; GeoCiencias)"}
 TIMEOUT = 40
@@ -46,15 +49,27 @@ def _get(url, **kw):
     return r
 
 
-def con_respaldo(nombre, funcion):
-    """Ejecuta la función; si falla devuelve el último dato bueno (o None) marcándolo como desactualizado."""
+def con_respaldo(nombre, funcion, clave=None):
+    """Ejecuta la función y guarda el resultado (memoria y SQLite). Si falla, devuelve el último dato bueno
+    —de memoria o, si se perdió, de SQLite— marcado como «respaldo»; si no hay ninguno, un error."""
     try:
         dato = funcion()
+        momento = datetime.datetime.now(datetime.timezone.utc)
+        _ULTIMO_BUENO[nombre] = dict(dato)
+        try:
+            almacen.guardar_fuente(nombre, dato, clave, momento)
+        except Exception:  # noqa: BLE001 - el almacén es una ayuda: nunca debe romper la descarga
+            pass
         dato["_estado"] = "ok"
-        _ULTIMO_BUENO[nombre] = dato
+        dato["_descargado"] = momento
         return dato
     except Exception as exc:  # noqa: BLE001 - cualquier fallo de red o de formato
         previo = _ULTIMO_BUENO.get(nombre)
+        if previo is None:
+            try:
+                previo, _ = almacen.leer_fuente(nombre, clave)
+            except Exception:  # noqa: BLE001
+                previo = None
         if previo is not None:
             previo = dict(previo)
             previo["_estado"] = "respaldo"
@@ -110,9 +125,36 @@ def parsear_nino_semanal(texto):
     return {"semana": fecha, "nino12": v[1], "nino3": v[3], "nino34": v[5], "nino4": v[7], "url": URL_NINO_SEMANAL}
 
 
+def parsear_oni_serie(texto):
+    """Todas las filas del ONI: ``(año, trimestre, anomalía)``."""
+    filas = []
+    for linea in texto.splitlines():
+        m = re.match(r"^\s*([A-Z]{3})\s+(\d{4})\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s*$", linea)
+        if m:
+            filas.append((int(m.group(2)), m.group(1), float(m.group(4))))
+    return filas
+
+
+def parsear_nino_serie(texto):
+    """Todas las semanas: ``(fecha ISO, nino12, nino3, nino34, nino4)`` (anomalías en °C)."""
+    fila = re.compile(r"^\s*(\d{2}[A-Z]{3}\d{4})\s+((?:-?\d+\.\d\s*){8})\s*$")
+    filas = []
+    for linea in texto.splitlines():
+        m = fila.match(linea)
+        if m:
+            v = [float(x) for x in re.findall(r"-?\d+\.\d", m.group(2))]
+            fecha = datetime.datetime.strptime(m.group(1).title(), "%d%b%Y").date()
+            filas.append((fecha.isoformat(), v[1], v[3], v[5], v[7]))
+    return filas
+
+
 def obtener_noaa_enso():
-    oni = parsear_oni(_get(URL_ONI).text)
-    semanal = parsear_nino_semanal(_get(URL_NINO_SEMANAL).text)
+    texto_oni, texto_nino = _get(URL_ONI).text, _get(URL_NINO_SEMANAL).text
+    oni, semanal = parsear_oni(texto_oni), parsear_nino_semanal(texto_nino)
+    try:                                   # series completas para los gráficos históricos
+        almacen.guardar_series_enso(parsear_oni_serie(texto_oni), parsear_nino_serie(texto_nino))
+    except Exception:  # noqa: BLE001
+        pass
     return {"oni": oni, "semanal": semanal}
 
 
@@ -288,17 +330,46 @@ def obtener_ciifen():
 # ----------------------------------------------------------------------------------------------
 # Carga conjunta (en paralelo)
 # ----------------------------------------------------------------------------------------------
-def cargar_todo(cantones):
-    """Descarga todas las fuentes en paralelo. Cada una devuelve su dato, el último bueno o un error."""
+def _clave_cantones(cantones):
+    """Huella del catálogo de cantones: si cambia, lo guardado de GFS/CFSv2 ya no sirve."""
+    texto = "|".join(f"{c['canton']}:{c['lat']}:{c['lon']}" for c in cantones)
+    return hashlib.sha1(texto.encode()).hexdigest()[:12]
+
+
+def cargar_todo(cantones, max_edad_s=3 * 3600):
+    """Obtiene todas las fuentes en paralelo.
+
+    Arranque rápido: si SQLite tiene el dato de una fuente con menos de ``max_edad_s`` segundos, se usa sin
+    descargar (``_origen`` = «sqlite»). Si no, se descarga; y si la descarga falla se usa el último dato bueno.
+    """
+    clave = _clave_cantones(cantones)
     tareas = {
-        "noaa": lambda: obtener_noaa_enso(),
-        "gfs": lambda: obtener_gfs(cantones),
-        "cfsv2": lambda: obtener_cfsv2(cantones),
-        "erfen": lambda: obtener_erfen(),
-        "ciifen": lambda: obtener_ciifen(),
+        "noaa": (lambda: obtener_noaa_enso(), None),
+        "gfs": (lambda: obtener_gfs(cantones), clave),
+        "cfsv2": (lambda: obtener_cfsv2(cantones), clave),
+        "erfen": (lambda: obtener_erfen(), None),
+        "ciifen": (lambda: obtener_ciifen(), None),
     }
+
+    def una(nombre, funcion, k):
+        try:
+            guardado, edad = almacen.leer_fuente(nombre, k)
+        except Exception:  # noqa: BLE001
+            guardado, edad = None, None
+        if guardado is not None and edad is not None and edad < max_edad_s:
+            guardado.update({"_estado": "ok", "_origen": "sqlite", "_edad_s": edad})   # «_descargado» ya viene del almacén
+            _ULTIMO_BUENO[nombre] = {k2: v for k2, v in guardado.items() if not k2.startswith("_")}
+            return guardado
+        dato = con_respaldo(nombre, funcion, k)
+        dato.setdefault("_edad_s", 0.0)
+        dato.setdefault("_descargado", datetime.datetime.now(datetime.timezone.utc))
+        return dato
+
     with ThreadPoolExecutor(max_workers=5) as pool:
-        futuros = {n: pool.submit(con_respaldo, n, f) for n, f in tareas.items()}
+        futuros = {n: pool.submit(una, n, f, k) for n, (f, k) in tareas.items()}
         resultados = {n: f.result() for n, f in futuros.items()}
-    resultados["_cargado"] = datetime.datetime.now(datetime.timezone.utc)
+    # Momento de la descarga más antigua (con arranque rápido es el original, no el de ahora): así la «foto» del
+    # riesgo no se repite cada vez que arranca un proceso
+    momentos = [r["_descargado"] for r in resultados.values() if r.get("_descargado")]
+    resultados["_cargado"] = min(momentos).replace(microsecond=0) if momentos else datetime.datetime.now(datetime.timezone.utc)
     return resultados

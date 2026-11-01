@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
+import almacen
 import fuentes_datos
 import modelo_riesgo
 from ecuador_perfil import ECUADOR_PERFIL
@@ -17,6 +18,7 @@ from ecuador_perfil import ECUADOR_PERFIL
 # Streamlit Cloud no recarga los módulos propios cuando se actualiza el repositorio (solo vuelve a ejecutar app.py),
 # y la app seguía usando el modelo anterior. Se recargan aquí; se conserva el «último dato bueno» de las fuentes.
 _ultimo_bueno = dict(fuentes_datos._ULTIMO_BUENO)
+importlib.reload(almacen)
 importlib.reload(fuentes_datos)
 fuentes_datos._ULTIMO_BUENO.update(_ultimo_bueno)
 importlib.reload(modelo_riesgo)
@@ -1099,6 +1101,10 @@ if not registros:
     st.error("Las fuentes respondieron sin datos utilizables. Intenta de nuevo en unos minutos.")
     st.stop()
 df_original = pd.DataFrame(registros)
+try:                      # historial local (SQLite): una «foto» por descarga; nunca debe romper la app
+    almacen.guardar_riesgo(DATOS["_cargado"], registros)
+except Exception:  # noqa: BLE001
+    pass
 
 # ==========================================
 # 4. INTERFAZ LATERAL (FILTROS)
@@ -1228,6 +1234,65 @@ st.dataframe(
         "alerta": "Alerta", "horizonte": "Pronóstico",
     },
 )
+
+# ==========================================
+# 7. HISTÓRICO (SQLite local)
+# ==========================================
+MES_CENTRAL = {"DJF": 1, "JFM": 2, "FMA": 3, "MAM": 4, "AMJ": 5, "MJJ": 6, "JJA": 7, "JAS": 8,
+               "ASO": 9, "SON": 10, "OND": 11, "NDJ": 12}
+
+with st.expander("📈 Histórico del ENSO y evolución del riesgo (almacén SQLite)"):
+    try:
+        oni_hist = pd.DataFrame(almacen.leer_oni(1950))
+        nino_hist = pd.DataFrame(almacen.leer_nino_semanal("1981-01-01"))
+        evolucion = pd.DataFrame(almacen.leer_evolucion_riesgo())
+        estado_db = almacen.resumen()
+    except Exception as exc:  # noqa: BLE001
+        oni_hist = nino_hist = evolucion = pd.DataFrame()
+        estado_db = None
+        st.warning(f"El almacén local no está disponible: {exc}")
+
+    if not oni_hist.empty:
+        oni_hist["fecha"] = [datetime.date(int(a), MES_CENTRAL.get(t, 6), 15) for a, t in zip(oni_hist["anio"], oni_hist["trimestre"])]
+        fig_oni = go.Figure(go.Bar(
+            x=oni_hist["fecha"], y=oni_hist["anomalia"],
+            marker_color=["#DC2626" if v >= 0.5 else ("#2563EB" if v <= -0.5 else "#9CA3AF") for v in oni_hist["anomalia"]],
+        ))
+        fig_oni.add_hline(y=0.5, line_dash="dot", line_color="#DC2626")
+        fig_oni.add_hline(y=-0.5, line_dash="dot", line_color="#2563EB")
+        fig_oni.update_layout(title="Índice Oceánico de El Niño (ONI), 1950 – hoy (°C) · rojo: El Niño, azul: La Niña",
+                              height=300, margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="#E5E7EB", plot_bgcolor="#F9FAFB")
+        st.plotly_chart(fig_oni, use_container_width=True)
+    if not nino_hist.empty:
+        fig_n = go.Figure()
+        fig_n.add_trace(go.Scatter(x=nino_hist["semana"], y=nino_hist["nino12"], name="Niño 1+2 (costa de Ecuador)", line=dict(color="#DC2626", width=1.5)))
+        fig_n.add_trace(go.Scatter(x=nino_hist["semana"], y=nino_hist["nino34"], name="Niño 3.4 (Pacífico central)", line=dict(color="#1D3557", width=1.5)))
+        fig_n.add_hline(y=0, line_color="#6B7280")
+        fig_n.update_layout(title="Anomalía semanal de la temperatura del mar, 1981 – hoy (°C)", height=300,
+                            margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="#E5E7EB", plot_bgcolor="#F9FAFB",
+                            legend=dict(orientation="h", y=-0.2))
+        st.plotly_chart(fig_n, use_container_width=True)
+
+    n_fotos = evolucion["descarga_utc"].nunique() if not evolucion.empty else 0
+    if n_fotos >= 2:
+        evolucion["momento"] = pd.to_datetime(evolucion["descarga_utc"]).dt.tz_convert("America/Guayaquil")
+        fig_e = go.Figure()
+        for canton_nombre, g in evolucion.groupby("canton"):
+            fig_e.add_trace(go.Scatter(x=g["momento"], y=g["riesgo_max"] * 100, name=canton_nombre, mode="lines+markers"))
+        fig_e.update_layout(title="Evolución del riesgo máximo por cantón en cada descarga (%)", height=320,
+                            margin=dict(l=20, r=20, t=50, b=20), paper_bgcolor="#E5E7EB", plot_bgcolor="#F9FAFB")
+        st.plotly_chart(fig_e, use_container_width=True)
+    elif estado_db:
+        st.info("La evolución del riesgo se dibuja cuando hay al menos dos descargas guardadas "
+                f"(ahora hay {estado_db['fotos_riesgo']}). Se guarda una cada vez que se renuevan los datos (cada 3 horas).")
+
+    if estado_db:
+        st.caption(
+            f"Almacén SQLite: {estado_db['oni']} trimestres del ONI · {estado_db['nino_semanal']} semanas de Niño · "
+            f"{estado_db['fotos_riesgo']} descargas de riesgo guardadas ({estado_db['tamano_kb']:.0f} KB). "
+            "En Streamlit Cloud los archivos locales se borran al reiniciar la app: las series del ENSO se vuelven a "
+            "descargar completas, pero el historial del riesgo solo dura mientras el servidor siga encendido."
+        )
 
 with st.expander("ℹ️ Cómo se calcula el riesgo (modelo indicativo)"):
     wi, wd = PESOS["inundacion"], PESOS["deslave"]

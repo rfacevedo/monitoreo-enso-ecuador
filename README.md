@@ -28,6 +28,11 @@ Proyecto GeoCiencias — Mentor: Raúl Acevedo.
 - `app.py` — interfaz Streamlit y visor Cesium.
 - `fuentes_datos.py` — lectores de las fuentes (con respaldo del último dato bueno si una fuente falla).
 - `modelo_riesgo.py` — catálogo de cantones, parámetros y cálculo del riesgo.
+- `almacen.py` — almacén local en **SQLite** (biblioteca estándar): caché de las fuentes (arranque en ~1 s en lugar de ~16 s,
+  y respaldo si una fuente se cae), series del ENSO (ONI desde 1950, Niño semanal desde 1981) e historial del riesgo.
+  Ojo: en Streamlit Cloud los archivos locales se borran al reiniciar la app, así que el historial del riesgo es temporal
+  (las series del ENSO se vuelven a descargar completas). Para un histórico permanente habría que guardar los datos fuera
+  de la app (archivos en el repositorio o una base externa).
 - `climatologia.json` — estadísticas locales de lluvia (se regenera con `python generar_climatologia.py`, ~30 min).
 - `ecuador_perfil.py` — contorno de Ecuador (geoBoundaries, CC0).
 - `test_fuentes_modelo.py` — pruebas sin red: `python -m unittest test_fuentes_modelo -v`.
