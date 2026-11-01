@@ -72,6 +72,8 @@ CESIUM_HTML_TEMPLATE = """
   .grupo select { border: 0; background: transparent; color: #fff; font-size: 13px; font-weight: 600;
     padding: 8px 10px 8px 4px; cursor: pointer; outline: none; }
   .grupo select option { color: #000; }
+  .grupo input[type=date] { border: 0; background: transparent; color: #fff; font-size: 13px;
+    font-weight: 600; padding: 7px 10px 7px 4px; outline: none; color-scheme: dark; }
   #estado { color: #fff; font-size: 12px; background: rgba(10,25,47,.85); padding: 6px 10px;
     border-radius: 8px; display: none; }
   .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(10,25,47,.9);
@@ -96,14 +98,26 @@ CESIUM_HTML_TEMPLATE = """
     <button id="btnOSM">Topográfico (OSM)</button>
   </div>
   <div class="grupo">
-    <label for="selCapa">Capa NOAA</label>
+    <label for="selCapa">Capa</label>
     <select id="selCapa">
       <option value="none">Ninguna</option>
-      <option value="lluvia">Lluvia pronosticada (GFS)</option>
-      <option value="viento">Viento pronosticado (GFS)</option>
-      <option value="nubes">Nubes / vapor de agua (GOES)</option>
-      <option value="sst">Temp. superficie del mar (GFS)</option>
+      <optgroup label="NOAA">
+        <option value="lluvia">Lluvia pronosticada (GFS)</option>
+        <option value="viento">Viento pronosticado (GFS)</option>
+        <option value="nubes">Nubes / vapor de agua (GOES)</option>
+        <option value="sst">Temp. superficie del mar (GFS)</option>
+      </optgroup>
+      <optgroup label="Satélite MODIS (NASA)">
+        <option value="m_tc">MODIS Color real (Terra)</option>
+        <option value="m_lst">MODIS Temp. superficie terrestre (día)</option>
+        <option value="m_ndvi">MODIS Vegetación NDVI (8 días)</option>
+        <option value="m_cf">MODIS Fracción de nubes (día)</option>
+      </optgroup>
     </select>
+  </div>
+  <div class="grupo" id="boxFecha" style="display:none">
+    <label for="inpFecha">Fecha</label>
+    <input type="date" id="inpFecha">
   </div>
   <div class="grupo" id="boxDia" style="display:none">
     <label for="selDia">Día</label>
@@ -186,6 +200,44 @@ CESIUM_HTML_TEMPLATE = """
     l.show = false;
     capasWms[k] = l;
   });
+
+  // Satélite MODIS (Terra) vía NASA GIBS: teselas diarias, se recrean al cambiar la fecha
+  const MODIS = {
+    m_tc:   { capa: 'MODIS_Terra_CorrectedReflectance_TrueColor', mt: 'GoogleMapsCompatible_Level9', ext: 'jpg', nivel: 9, alpha: 1.0,
+              leyenda: '<b>MODIS Color real (Terra)</b>Imagen tal como la ve el satélite: nubes, humo, sedimentos en ríos y costa.' },
+    m_lst:  { capa: 'MODIS_Terra_Land_Surface_Temp_Day', mt: 'GoogleMapsCompatible_Level7', ext: 'png', nivel: 7, alpha: 0.75,
+              leyenda: '<b>MODIS Temp. superficie terrestre (día)</b>Colores cálidos = suelo más caliente. Los huecos son nubes.' },
+    m_ndvi: { capa: 'MODIS_Terra_NDVI_8Day', mt: 'GoogleMapsCompatible_Level9', ext: 'png', nivel: 9, alpha: 0.8,
+              leyenda: '<b>MODIS Vegetación NDVI (8 días)</b>Verde intenso = vegetación sana; tonos pardos = suelo seco o sin cubierta.' },
+    m_cf:   { capa: 'MODIS_Terra_Cloud_Fraction_Day', mt: 'GoogleMapsCompatible_Level6', ext: 'png', nivel: 6, alpha: 0.75,
+              leyenda: '<b>MODIS Fracción de nubes (día)</b>Más opaco/claro = mayor cobertura de nubes.' }
+  };
+  let capaModis = null;
+  const inpFecha = document.getElementById('inpFecha');
+  const boxFecha = document.getElementById('boxFecha');
+  (function () {
+    const hoy = new Date();
+    const f = function (dias) {
+      return new Date(hoy.getTime() - dias * 86400000).toISOString().slice(0, 10);
+    };
+    inpFecha.max = f(1);
+    inpFecha.value = f(2);   // las capas diarias de GIBS llegan con 1-3 días de retraso
+  })();
+
+  function quitarModis() {
+    if (capaModis) { viewer.imageryLayers.remove(capaModis, true); capaModis = null; }
+  }
+  function ponerModis(clave) {
+    quitarModis();
+    const c = MODIS[clave];
+    const url = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/' + c.capa + '/default/' +
+      inpFecha.value + '/' + c.mt + '/{z}/{y}/{x}.' + c.ext;
+    capaModis = viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+      url: url, maximumLevel: c.nivel, credit: 'NASA EOSDIS GIBS / MODIS Terra'
+    }));
+    capaModis.alpha = c.alpha;
+    viewer.scene.requestRender();
+  }
 
   // Lluvia / viento: pronóstico diario del GFS (NOAA) en rejilla de 1°, servido por Open-Meteo
   const fuenteGfs = new Cesium.CustomDataSource('gfs');
@@ -305,9 +357,16 @@ CESIUM_HTML_TEMPLATE = """
     Object.keys(capasWms).forEach(function (k) { capasWms[k].show = (k === sel); });
     fuenteGfs.entities.removeAll();
     boxDia.style.display = 'none';
+    boxFecha.style.display = 'none';
+    quitarModis();
     setEstado('');
     if (sel === 'none') {
       leyendaNoaa.style.display = 'none';
+    } else if (MODIS[sel]) {
+      boxFecha.style.display = 'flex';
+      ponerModis(sel);
+      leyendaNoaa.innerHTML = MODIS[sel].leyenda + '<small>NASA GIBS, satélite Terra. Se actualiza a diario con 1–3 días de retraso.</small>';
+      leyendaNoaa.style.display = 'block';
     } else if (WMS[sel]) {
       leyendaNoaa.innerHTML = WMS[sel].leyenda;
       leyendaNoaa.style.display = 'block';
@@ -332,6 +391,9 @@ CESIUM_HTML_TEMPLATE = """
   }
 
   selCapa.onchange = aplicarCapaNoaa;
+  inpFecha.onchange = function () {
+    if (MODIS[selCapa.value] && inpFecha.value) { ponerModis(selCapa.value); }
+  };
   selDia.onchange = function () {
     if (gfs && (selCapa.value === 'lluvia' || selCapa.value === 'viento')) {
       dibujarGfs(selCapa.value, parseInt(selDia.value, 10));
@@ -488,7 +550,7 @@ umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
 st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Cesium")
-st.sidebar.caption("El cambio de mapa base (Esri / OSM) y la capa de predicción NOAA (lluvia, viento) están dentro del visor.")
+st.sidebar.caption("El cambio de mapa base (Esri / OSM) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
 
 df_filtrado = df_original[
     (df_original['fecha'] >= fecha_inicio) &
@@ -507,7 +569,7 @@ df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().res
 # ==========================================
 st.subheader("📍 Visor Geográfico Interactivo (Cesium 3D)")
 render_cesium(df_mapa_reciente, alto=560)
-st.caption("Topografía: © colaboradores de OpenStreetMap · Imagen: © Esri, Maxar, Earthstar Geographics · Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST · Visor: CesiumJS")
+st.caption("Topografía: © colaboradores de OpenStreetMap · Imagen: © Esri, Maxar, Earthstar Geographics · Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST · Satélite: NASA GIBS / MODIS · Visor: CesiumJS")
 
 # ==========================================
 # 6. INDICADORES, GRÁFICO Y TABLA
