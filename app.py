@@ -63,7 +63,7 @@ CESIUM_HTML_TEMPLATE = """
     font-family: -apple-system, 'Segoe UI', Arial, sans-serif; background: #0A192F; }
   .toolbar { position: absolute; top: 10px; left: 10px; right: 90px; z-index: 10; display: flex; gap: 10px;
     flex-wrap: wrap; align-items: flex-start; }
-  .grupo { display: flex; align-items: center; background: rgba(10,25,47,.92); border-radius: 8px;
+  .grupo { display: flex; align-items: center; background: rgba(29,53,87,.95); border-radius: 8px;
     overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.45); }
   .grupo button { border: 0; background: transparent; color: #CBD5E1; padding: 8px 14px;
     font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -76,9 +76,9 @@ CESIUM_HTML_TEMPLATE = """
   .grupo select option { color: #000; }
   .grupo input[type=date] { border: 0; background: transparent; color: #fff; font-size: 13px;
     font-weight: 600; padding: 7px 10px 7px 4px; outline: none; color-scheme: dark; }
-  #estado { color: #fff; font-size: 12px; background: rgba(10,25,47,.85); padding: 6px 10px;
+  #estado { color: #fff; font-size: 12px; background: rgba(29,53,87,.92); padding: 6px 10px;
     border-radius: 8px; display: none; }
-  .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(10,25,47,.9);
+  .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(29,53,87,.92);
     color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.7; }
   /* Mapas base apilados: Esri arriba, OSM debajo, del mismo ancho */
   #grpBase { flex-direction: column; align-items: stretch; }
@@ -948,7 +948,7 @@ st.markdown(
     """
     <style>
     .stApp { background-color: #E5E7EB !important; }
-    [data-testid="stSidebar"] { background-color: #0A192F !important; color: #FFFFFF !important; }
+    [data-testid="stSidebar"] { background-color: #1D3557 !important; color: #FFFFFF !important; }
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     [data-testid="stSidebar"] input { color: #000000 !important; font-weight: bold !important; }
