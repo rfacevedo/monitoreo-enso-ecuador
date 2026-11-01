@@ -1,5 +1,6 @@
 import calendar
 import datetime
+import html
 import json
 from zoneinfo import ZoneInfo
 
@@ -8,7 +9,9 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
+import fuentes_datos
 from ecuador_perfil import ECUADOR_PERFIL
+from modelo_riesgo import CANTONES, PESOS, UMBRALES, ENSO_MAX_AMPLIFICACION, construir_registros
 
 # Se fija 1.105.2: desde 1.113 los workers son módulos ES y el navegador los bloquea
 # al cargarse desde un CDN dentro del iframe de Streamlit (el globo queda vacío).
@@ -20,6 +23,7 @@ COLORES_ALERTA = {
     "ALTO RIESGO": "#FF4D4D",
     "ALERTA AMARILLA": "#FFCC00",
     "MEDIO (DESLAVE)": "#FFA500",
+    "BAJO": "#16A34A",
 }
 
 
@@ -41,9 +45,13 @@ def estilo_filas_alertas(row):
     elif val_alerta == "MEDIO (DESLAVE)":
         bg_geo = 'background-color: #F3F4F6; color: #374151; font-weight: bold;'
         bg_alerta = 'background-color: #FFA500; color: white; font-weight: bold;'
+    elif val_alerta == "BAJO":
+        bg_geo = 'background-color: #DCFCE7; color: #166534; font-weight: bold;'
+        bg_alerta = 'background-color: #16A34A; color: white; font-weight: bold;'
     else:
-        return ['', '', '', '', '', '']
-    return ['', bg_geo, bg_geo, '', '', bg_alerta]
+        return [''] * 7
+    # columnas: fecha, canton, provincia, lluvia_mm, mar_cm, alerta, horizonte
+    return ['', bg_geo, bg_geo, '', '', bg_alerta, '']
 
 
 def sumar_un_mes(fecha):
@@ -834,10 +842,11 @@ CESIUM_HTML_TEMPLATE = """
         '<tr><th>Provincia</th><td>' + p.provincia + '</td></tr>' +
         '<tr><th>Alerta</th><td>' + p.alerta + '</td></tr>' +
         '<tr><th>Riesgo</th><td>' + Math.round(p.riesgo * 100) + '%</td></tr>' +
-        '<tr><th>Lluvia</th><td>+' + p.lluvia_mm + ' mm</td></tr>' +
+        '<tr><th>Lluvia</th><td>+' + p.lluvia_mm + (p.horizonte.indexOf('mes') >= 0 ? ' mm/mes' : ' mm/día') + '</td></tr>' +
         '<tr><th>Nivel del mar</th><td>+' + p.mar_cm + ' cm</td></tr>' +
         '<tr><th>Elevación</th><td>' + p.elevacion + ' m</td></tr>' +
         '<tr><th>Fecha</th><td>' + p.fecha + '</td></tr>' +
+        '<tr><th>Pronóstico</th><td>' + p.horizonte + '</td></tr>' +
         '</tbody></table>'
     });
   });
@@ -940,6 +949,7 @@ def render_cesium(df, alto=560):
             "riesgo": float(r["riesgo"]), "alerta": r["alerta"],
             "lluvia_mm": float(r["lluvia_mm"]), "mar_cm": float(r["mar_cm"]),
             "elevacion": float(r["elevacion"]), "fecha": r["fecha"].isoformat(),
+            "horizonte": r["horizonte"],
         }
         for _, r in df.iterrows()
     ]
@@ -989,6 +999,8 @@ st.markdown(
         font-size: 20px !important; font-weight: bold !important; line-height: 1.3 !important;
         color: #FFFFFF !important; margin-bottom: 12px !important;
     }
+    [data-testid="stSidebar"] .panel-enso { font-size: 13px; line-height: 1.55; }
+    [data-testid="stSidebar"] .panel-enso small { color: #CBD5E1; }
     </style>
     """,
     unsafe_allow_html=True
@@ -996,42 +1008,88 @@ st.markdown(
 
 
 # ==========================================
-# 3. BASE DE DATOS DE PRUEBA
+# 3. DATOS EN VIVO (NOAA, INOCAR, CIIFEN) Y MODELO DE RIESGO
 # ==========================================
-# Los datos de prueba se corren solos con la fecha actual (hoy + 14, + 44 y + 75 días), de modo que
-# siempre haya registros de ejemplo dentro de la ventana de fechas. Reemplazar por datos reales.
-_HOY = fecha_actual_ecuador()
-FECHA_1 = _HOY + datetime.timedelta(days=14)
-FECHA_2 = _HOY + datetime.timedelta(days=44)
-FECHA_3 = _HOY + datetime.timedelta(days=75)
+@st.cache_data(ttl=3 * 3600, show_spinner="Descargando datos de NOAA, INOCAR y CIIFEN…")
+def cargar_datos_reales():
+    """Descarga todas las fuentes en paralelo; se guarda 3 horas. Si falla toda la lluvia no se guarda."""
+    datos = fuentes_datos.cargar_todo(CANTONES)
+    if all((datos.get(k) or {}).get("_estado") == "error" for k in ("gfs", "cfsv2")):
+        raise RuntimeError("No se pudo descargar ningún pronóstico de lluvia (NOAA GFS / CFSv2).")
+    return datos
 
-data_points = [
-    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 210.5, "mar_cm": 35.0, "riesgo": 0.65, "alerta": "ALERTA AMARILLA", "lat": -1.80, "lon": -79.53, "fecha": FECHA_1},
-    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 250.0, "mar_cm": 45.0, "riesgo": 0.95, "alerta": "CRÍTICO", "lat": -2.20, "lon": -79.89, "fecha": FECHA_1},
-    {"canton": "Chone", "provincia": "Manabí", "elevacion": 15.0, "lluvia_mm": 190.2, "mar_cm": 0.0, "riesgo": 0.60, "alerta": "ALERTA AMARILLA", "lat": -0.69, "lon": -80.09, "fecha": FECHA_1},
-    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 320.0, "mar_cm": 48.0, "riesgo": 0.92, "alerta": "CRÍTICO", "lat": -1.80, "lon": -79.53, "fecha": FECHA_2},
-    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 380.0, "mar_cm": 52.0, "riesgo": 0.98, "alerta": "CRÍTICO", "lat": -2.20, "lon": -79.89, "fecha": FECHA_2},
-    {"canton": "Chone", "provincia": "Manabí", "elevacion": 15.0, "lluvia_mm": 310.2, "mar_cm": 0.0, "riesgo": 0.85, "alerta": "ALTO RIESGO", "lat": -0.69, "lon": -80.09, "fecha": FECHA_2},
-    {"canton": "Machala", "provincia": "El Oro", "elevacion": 3.0, "lluvia_mm": 220.4, "mar_cm": 46.0, "riesgo": 0.82, "alerta": "ALTO RIESGO", "lat": -3.26, "lon": -79.96, "fecha": FECHA_2},
-    {"canton": "Babahoyo", "provincia": "Los Ríos", "elevacion": 8.0, "lluvia_mm": 280.0, "mar_cm": 42.0, "riesgo": 0.85, "alerta": "ALTO RIESGO", "lat": -1.80, "lon": -79.53, "fecha": FECHA_3},
-    {"canton": "Guayaquil", "provincia": "Guayas", "elevacion": 4.0, "lluvia_mm": 290.0, "mar_cm": 40.0, "riesgo": 0.88, "alerta": "ALTO RIESGO", "lat": -2.20, "lon": -79.89, "fecha": FECHA_3},
-    {"canton": "Bucay", "provincia": "Guayas", "elevacion": 320.0, "lluvia_mm": 350.0, "mar_cm": 0.0, "riesgo": 0.55, "alerta": "MEDIO (DESLAVE)", "lat": -2.20, "lon": -79.13, "fecha": FECHA_3},
-    {"canton": "Machala", "provincia": "El Oro", "elevacion": 3.0, "lluvia_mm": 180.4, "mar_cm": 40.0, "riesgo": 0.75, "alerta": "ALTO RIESGO", "lat": -3.26, "lon": -79.96, "fecha": FECHA_3},
 
-    # --- Provincias añadidas: Esmeraldas, Santa Elena y Santo Domingo de los Tsáchilas ---
-    # Valores de prueba (ilustrativos), igual que el resto de la tabla; reemplazar por datos reales.
-    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 230.0, "mar_cm": 30.0, "riesgo": 0.62, "alerta": "ALERTA AMARILLA", "lat": 0.96, "lon": -79.65, "fecha": FECHA_1},
-    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 340.0, "mar_cm": 44.0, "riesgo": 0.87, "alerta": "ALTO RIESGO", "lat": 0.96, "lon": -79.65, "fecha": FECHA_2},
-    {"canton": "Esmeraldas", "provincia": "Esmeraldas", "elevacion": 8.0, "lluvia_mm": 300.0, "mar_cm": 38.0, "riesgo": 0.78, "alerta": "ALTO RIESGO", "lat": 0.96, "lon": -79.65, "fecha": FECHA_3},
-    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 120.0, "mar_cm": 38.0, "riesgo": 0.52, "alerta": "ALERTA AMARILLA", "lat": -2.23, "lon": -80.86, "fecha": FECHA_1},
-    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 260.0, "mar_cm": 50.0, "riesgo": 0.83, "alerta": "ALTO RIESGO", "lat": -2.23, "lon": -80.86, "fecha": FECHA_2},
-    {"canton": "Santa Elena", "provincia": "Santa Elena", "elevacion": 10.0, "lluvia_mm": 210.0, "mar_cm": 41.0, "riesgo": 0.72, "alerta": "ALTO RIESGO", "lat": -2.23, "lon": -80.86, "fecha": FECHA_3},
-    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 240.0, "mar_cm": 0.0, "riesgo": 0.58, "alerta": "ALERTA AMARILLA", "lat": -0.25, "lon": -79.18, "fecha": FECHA_1},
-    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 340.0, "mar_cm": 0.0, "riesgo": 0.74, "alerta": "ALTO RIESGO", "lat": -0.25, "lon": -79.18, "fecha": FECHA_2},
-    {"canton": "Santo Domingo", "provincia": "Santo Domingo de los Tsáchilas", "elevacion": 655.0, "lluvia_mm": 360.0, "mar_cm": 0.0, "riesgo": 0.62, "alerta": "MEDIO (DESLAVE)", "lat": -0.25, "lon": -79.18, "fecha": FECHA_3},
-]
+def categoria_oni(valor):
+    """Categorías de NOAA para el ONI."""
+    if valor >= 2.0:
+        return "El Niño muy fuerte"
+    if valor >= 1.5:
+        return "El Niño fuerte"
+    if valor >= 1.0:
+        return "El Niño moderado"
+    if valor >= 0.5:
+        return "El Niño débil"
+    if valor <= -0.5:
+        return "La Niña"
+    return "neutral"
 
-df_original = pd.DataFrame(data_points)
+
+def _punto(fuente):
+    estado = (fuente or {}).get("_estado")
+    return {"ok": "🟢", "respaldo": "🟡"}.get(estado, "🔴")
+
+
+def panel_enso_html(datos, indice_enso):
+    """Resumen de las fuentes en vivo para la barra lateral (todo el texto externo va escapado)."""
+    e = html.escape
+    noaa, erfen, ciifen = datos.get("noaa"), datos.get("erfen"), datos.get("ciifen")
+    lineas = []
+    if (noaa or {}).get("_estado") != "error" and noaa:
+        oni, sem = noaa["oni"], noaa["semanal"]
+        lineas.append(
+            f"{_punto(noaa)} <b>NOAA</b> · ONI {e(oni['trimestre'])}: <b>{oni['anomalia']:+.2f} °C</b> "
+            f"({categoria_oni(oni['anomalia'])})<br>&nbsp;&nbsp;&nbsp;Niño 1+2: {sem['nino12']:+.1f} °C · "
+            f"Niño 3.4: {sem['nino34']:+.1f} °C (semana del {sem['semana'].strftime('%d-%m-%Y')})")
+    else:
+        lineas.append("🔴 <b>NOAA</b> · ENSO no disponible")
+    if erfen and erfen.get("_estado") != "error":
+        mar = erfen.get("nivel_mar_cm")
+        local = ", ".join(f"{e(k.title())} +{v:.0f} cm" for k, v in (erfen.get("nivel_mar_local") or {}).items())
+        txt = f"{_punto(erfen)} <b>INOCAR · ERFEN {e(str(erfen.get('informe')))}</b> ({e(str(erfen.get('fecha_reunion')))})"
+        if mar is not None:
+            txt += f"<br>&nbsp;&nbsp;&nbsp;Nivel del mar: más de +{mar:.0f} cm" + (f" ({local})" if local else "")
+        d = erfen.get("desbordamientos")
+        if d:
+            txt += f"<br>&nbsp;&nbsp;&nbsp;Desbordamientos (SNGR): {d['antes']} → {d['ahora']}"
+        lineas.append(txt)
+    else:
+        lineas.append("🔴 <b>INOCAR · ERFEN</b> no disponible")
+    if ciifen and ciifen.get("_estado") != "error":
+        lineas.append(f"{_punto(ciifen)} <b>CIIFEN</b> · boletín {e(ciifen['boletin'])}:<br>&nbsp;&nbsp;&nbsp;{e(ciifen['estado'])}")
+    else:
+        lineas.append("🔴 <b>CIIFEN</b> no disponible")
+    lluvia = f"{_punto(datos.get('gfs'))} NOAA GFS (16 días) · {_punto(datos.get('cfsv2'))} CFSv2 (10 meses)"
+    lineas.append(f"<b>Lluvia</b>: {lluvia}")
+    lineas.append(f"<b>Índice ENSO del modelo</b>: {indice_enso:.2f} (amplifica el riesgo hasta +{ENSO_MAX_AMPLIFICACION * 100:.0f} %)")
+    try:
+        hora = datos["_cargado"].astimezone(ZoneInfo("America/Guayaquil")).strftime("%d-%m-%Y %H:%M")
+    except Exception:
+        hora = "—"
+    lineas.append(f"<small>Datos descargados: {hora} (hora de Ecuador). Se renuevan cada 3 horas.</small>")
+    return '<div class="panel-enso">' + "<br>".join(lineas) + "</div>"
+
+
+try:
+    DATOS = cargar_datos_reales()
+except Exception as exc:  # noqa: BLE001
+    st.error(f"No se pudieron obtener los datos en vivo: {exc} Intenta de nuevo en unos minutos.")
+    st.stop()
+
+registros, INDICE_ENSO = construir_registros(DATOS, hoy=fecha_actual_ecuador())
+if not registros:
+    st.error("Las fuentes respondieron sin datos utilizables. Intenta de nuevo en unos minutos.")
+    st.stop()
+df_original = pd.DataFrame(registros)
 
 # ==========================================
 # 4. INTERFAZ LATERAL (FILTROS)
@@ -1066,6 +1124,13 @@ st.sidebar.markdown(
 )
 
 st.sidebar.markdown("---")
+st.sidebar.header("🌊 Estado ENSO en vivo")
+st.sidebar.markdown(panel_enso_html(DATOS, INDICE_ENSO), unsafe_allow_html=True)
+if st.sidebar.button("🔄 Actualizar datos"):
+    st.cache_data.clear()
+    st.rerun()
+
+st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Geográfico")
 st.sidebar.caption("El cambio de mapa base (Esri / Topográfico / Base OSM) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
 st.sidebar.caption(
@@ -1074,6 +1139,7 @@ st.sidebar.caption(
     "Topografía: © colaboradores de OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)  \n"
     "Imagen: © Esri, Maxar, Earthstar Geographics  \n"
     "Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST  \n"
+    "ENSO: NOAA CPC (ONI, Niño) · INOCAR (informe ERFEN) · CIIFEN (boletín El Niño/La Niña)  \n"
     "Pronóstico estacional: CCSR/IRI, Columbia Climate School (CFSv2 de NOAA/NCEP)  \n"
     "Satélite: NASA GIBS / MODIS  \n"
     "Perfil de Ecuador: geoBoundaries (CC0)  \n"
@@ -1090,12 +1156,26 @@ if df_filtrado.empty:
     st.info("No hay registros climáticos o alertas que coincidan con los filtros seleccionados.")
     st.stop()
 
-df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().reset_index()
+# Para cada cantón se muestra el peor escenario (mayor riesgo) dentro de las fechas elegidas
+df_mapa_reciente = (
+    df_filtrado.sort_values(['riesgo', 'fecha'], ascending=[False, True])
+    .groupby('canton', sort=False).first().reset_index()
+)
 
 # ==========================================
 # 5. VISOR GEOGRÁFICO PRINCIPAL (CESIUM 2D/3D)
 # ==========================================
 render_cesium(df_mapa_reciente, alto=560)
+
+NOMBRES_FUENTES = {"noaa": "NOAA (ONI y Niño)", "gfs": "NOAA GFS (lluvia diaria)", "cfsv2": "CFSv2 (lluvia mensual)",
+                   "erfen": "INOCAR · ERFEN (nivel del mar)", "ciifen": "CIIFEN (boletín)"}
+for clave, nombre in NOMBRES_FUENTES.items():
+    estado = (DATOS.get(clave) or {}).get("_estado")
+    if estado == "error":
+        st.warning(f"Fuente no disponible: {nombre}. El modelo sigue con las demás, sin este dato.")
+    elif estado == "respaldo":
+        st.info(f"{nombre}: no respondió; se usa el último dato descargado.")
+st.caption("El mapa y el gráfico muestran, para cada cantón, el **peor escenario** (mayor riesgo) dentro de las fechas elegidas.")
 
 # ==========================================
 # 6. INDICADORES, GRÁFICO Y TABLA
@@ -1103,7 +1183,7 @@ render_cesium(df_mapa_reciente, alto=560)
 c1, c2, c3 = st.columns(3)
 c1.metric("Cantones en alerta", len(df_mapa_reciente))
 c2.metric("Riesgo máximo", f"{int(df_mapa_reciente['riesgo'].max() * 100)}%")
-c3.metric("Lluvia máxima", f"+{df_mapa_reciente['lluvia_mm'].max():.0f} mm")
+c3.metric("Lluvia máx. (día o mes)", f"+{df_mapa_reciente['lluvia_mm'].max():.0f} mm")
 
 df_barras = df_mapa_reciente.sort_values('riesgo', ascending=False)
 fig = go.Figure(go.Bar(
@@ -1126,7 +1206,48 @@ st.plotly_chart(fig, use_container_width=True)
 st.subheader("📋 Detalle de alertas")
 df_tabla = (
     df_filtrado.sort_values(['fecha', 'riesgo'], ascending=[True, False])
-    [['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta']]
+    [['fecha', 'canton', 'provincia', 'lluvia_mm', 'mar_cm', 'alerta', 'horizonte']]
     .reset_index(drop=True)
 )
-st.dataframe(df_tabla.style.apply(estilo_filas_alertas, axis=1), use_container_width=True, hide_index=True)
+st.dataframe(
+    df_tabla.style.apply(estilo_filas_alertas, axis=1),
+    use_container_width=True, hide_index=True,
+    column_config={
+        "fecha": "Fecha", "canton": "Cantón", "provincia": "Provincia",
+        "lluvia_mm": st.column_config.NumberColumn("Lluvia (mm, día o mes)", format="%.1f"),
+        "mar_cm": st.column_config.NumberColumn("Nivel del mar (+cm)", format="%.0f"),
+        "alerta": "Alerta", "horizonte": "Pronóstico",
+    },
+)
+
+with st.expander("ℹ️ Cómo se calcula el riesgo (modelo indicativo)"):
+    wi, wd = PESOS["inundacion"], PESOS["deslave"]
+    st.markdown(
+        f"""
+**El riesgo (0 a 100 %)** de cada cantón combina datos en vivo de tres fuentes:
+
+`riesgo = (peso_lluvia · lluvia + peso_mar · nivel del mar + peso_exposición · exposición) × (1 + {ENSO_MAX_AMPLIFICACION:.2f} · índice ENSO)`
+
+| Amenaza | Lluvia | Nivel del mar | Exposición |
+|---|---|---|---|
+| Inundación | {wi['lluvia']:.0%} | {wi['mar']:.0%} | {wi['expo']:.0%} (baja elevación) |
+| Deslave | {wd['lluvia']:.0%} | {wd['mar']:.0%} | {wd['expo']:.0%} (pendiente supuesta) |
+
+- **Lluvia:** NOAA GFS por día (16 días) y CFSv2 por mes (hasta 10 meses), contra umbrales de 60 mm/día,
+  120 mm en 3 días y 450 mm/mes.
+- **Nivel del mar:** anomalía publicada en el informe ERFEN de INOCAR, solo para cantones costeros.
+- **Índice ENSO:** promedio del ONI (NOAA CPC, saturado en 2 °C) y de la anomalía semanal de Niño 1+2
+  (saturada en 4 °C).
+- **Alertas:** crítico desde {UMBRALES['critico']:.0%}, alto riesgo desde {UMBRALES['alto']:.0%}, alerta amarilla desde
+  {UMBRALES['amarilla']:.0%}; en deslave, «medio» desde {UMBRALES['deslave_medio']:.0%}; por debajo, bajo.
+
+**Importante:** es un modelo sencillo y **no sustituye** los boletines oficiales de INAMHI, SNGR ni del Comité ERFEN.
+Los pesos y umbrales (archivo `modelo_riesgo.py`) son una primera calibración y deben ser revisados.
+La información de INOCAR y CIIFEN se lee de sus boletines en PDF; si cambian de formato, esa fuente puede
+quedar sin datos y la app lo avisará.
+
+Fuentes: [NOAA CPC · ONI]({fuentes_datos.URL_ONI}) · [NOAA CPC · Niño semanal]({fuentes_datos.URL_NINO_SEMANAL}) ·
+[INOCAR · informe ERFEN vigente]({fuentes_datos.URL_ERFEN}) · [CIIFEN · boletines El Niño/La Niña]({fuentes_datos.URL_CIIFEN_LISTA}) ·
+[NOAA GFS vía Open-Meteo](https://open-meteo.com/en/docs/gfs-api) · [CCSR/IRI · CFSv2]({fuentes_datos.URL_CFSV2})
+"""
+    )
