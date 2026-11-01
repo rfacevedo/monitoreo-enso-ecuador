@@ -157,7 +157,7 @@ CESIUM_HTML_TEMPLATE = """
     <button id="btnTopo">Topográfico (OSM)</button>
     <button id="btnOSM">Base (OSM)</button>
     <button id="btnOSMt">OSM transparente</button>
-    <button id="btnNombres" title="Superpone solo los nombres de lugares (datos de OSM, fondo transparente)">+ Nombres (CARTO)</button>
+    <button id="btnNombres" title="Superpone nombres de lugares y límites con fondo transparente (Esri)">+ Nombres y límites</button>
   </div>
   <div class="grupo">
     <label for="selCapa">Capa</label>
@@ -271,14 +271,15 @@ CESIUM_HTML_TEMPLATE = """
   // nombres sobre la imagen satelital (OSM no publica teselas transparentes propias; la mezcla se hace aquí).
   const OPACIDAD_OSM_TRANSPARENTE = 0.5;
 
-  // Nombres (CARTO): teselas PNG transparentes con solo los nombres de lugares de OSM; se superponen a cualquier mapa base
-  // (a diferencia de los demás botones, este se enciende y se apaga sin cambiar de mapa base).
+  // Nombres y límites (Esri, «Reference/World_Boundaries_and_Places»): teselas PNG transparentes con nombres de lugares y
+  // fronteras, se superponen a cualquier mapa base (a diferencia de los demás botones, este se enciende y se apaga sin
+  // cambiar de mapa base). Se probó antes CARTO «only_labels» (datos de OSM), pero ahora exige clave de API y devuelve
+  // teselas con la marca «API KEY REQUIRED».
   const capaNombres = viewer.imageryLayers.addImageryProvider(
     new Cesium.UrlTemplateImageryProvider({
-      url: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}.png',
-      subdomains: ['a', 'b', 'c', 'd'],
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
       maximumLevel: 18,
-      credit: 'Nombres © colaboradores de OpenStreetMap © CARTO'
+      credit: 'Nombres y límites © Esri'
     }));
   capaNombres.show = false;
   // Los nombres deben quedar por encima de las capas de datos (lluvia, MODIS, NOAA), que se crean después
@@ -1217,7 +1218,7 @@ st.sidebar.header("🗺️ Visor Geográfico")
 st.sidebar.caption("El cambio de mapa base (Esri / Topográfico / Base OSM / OSM transparente / Nombres) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
 st.sidebar.caption(
     "**Fuentes y créditos**  \n"
-    "Base: © colaboradores de OpenStreetMap · Nombres: © OSM y © CARTO  \n"
+    "Base: © colaboradores de OpenStreetMap · Nombres y límites: © Esri  \n"
     "Topografía: © colaboradores de OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)  \n"
     "Imagen: © Esri, Maxar, Earthstar Geographics  \n"
     "Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST  \n"
