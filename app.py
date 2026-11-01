@@ -157,7 +157,6 @@ CESIUM_HTML_TEMPLATE = """
     <button id="btnTopo">Topográfico (OSM)</button>
     <button id="btnOSM">Base (OSM)</button>
     <button id="btnOSMt">OSM transparente</button>
-    <button id="btnNombres" title="Superpone nombres de lugares y límites con fondo transparente (Esri)">+ Nombres y límites</button>
   </div>
   <div class="grupo">
     <label for="selCapa">Capa</label>
@@ -271,23 +270,6 @@ CESIUM_HTML_TEMPLATE = """
   // nombres sobre la imagen satelital (OSM no publica teselas transparentes propias; la mezcla se hace aquí).
   const OPACIDAD_OSM_TRANSPARENTE = 0.5;
 
-  // Nombres y límites (Esri, «Reference/World_Boundaries_and_Places»): teselas PNG transparentes con nombres de lugares y
-  // fronteras, se superponen a cualquier mapa base (a diferencia de los demás botones, este se enciende y se apaga sin
-  // cambiar de mapa base). Se probó antes CARTO «only_labels» (datos de OSM), pero ahora exige clave de API y devuelve
-  // teselas con la marca «API KEY REQUIRED».
-  const capaNombres = viewer.imageryLayers.addImageryProvider(
-    new Cesium.UrlTemplateImageryProvider({
-      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-      maximumLevel: 18,
-      credit: 'Nombres y límites © Esri'
-    }));
-  capaNombres.show = false;
-  // Los nombres deben quedar por encima de las capas de datos (lluvia, MODIS, NOAA), que se crean después
-  function subirNombres() {
-    if (capaNombres.show) { viewer.imageryLayers.raiseToTop(capaNombres); }
-    viewer.scene.requestRender();
-  }
-
   function setBase(base) {
     capaOSM.show = base === 'osm' || base === 'osmt';
     capaOSM.alpha = base === 'osmt' ? OPACIDAD_OSM_TRANSPARENTE : OPACIDAD_BASE;
@@ -331,7 +313,7 @@ CESIUM_HTML_TEMPLATE = """
       url: c.url, layers: c.layers, parameters: params, credit: c.credit
     }));
     capaWms.alpha = c.alpha;
-    subirNombres();
+    viewer.scene.requestRender();
   }
   // Lee del GetCapabilities los instantes disponibles (dimensión TIME) de la capa
   function cargarTiemposWms(clave) {
@@ -392,7 +374,7 @@ CESIUM_HTML_TEMPLATE = """
       url: url, maximumLevel: c.nivel, credit: 'NASA EOSDIS GIBS / MODIS Terra'
     }));
     capaModis.alpha = c.alpha;
-    subirNombres();
+    viewer.scene.requestRender();
   }
 
   // Pronóstico estacional CCSR/IRI (Columbia): media de los 32 miembros del CFSv2 (NOAA/NCEP, NMME),
@@ -932,11 +914,6 @@ CESIUM_HTML_TEMPLATE = """
   document.getElementById('btnTopo').onclick = function () { setBase('topo'); };
   document.getElementById('btnOSM').onclick = function () { setBase('osm'); };
   document.getElementById('btnOSMt').onclick = function () { setBase('osmt'); };
-  document.getElementById('btnNombres').onclick = function () {
-    capaNombres.show = !capaNombres.show;
-    document.getElementById('btnNombres').classList.toggle('activo', capaNombres.show);
-    subirNombres();
-  };
   document.getElementById('btnEsri').onclick = function () { setBase('esri'); };
   document.getElementById('btnHome').onclick = function () { irAInicio(1.2); };
 
@@ -1215,10 +1192,10 @@ if st.sidebar.button("🔄 Actualizar datos"):
 
 st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Geográfico")
-st.sidebar.caption("El cambio de mapa base (Esri / Topográfico / Base OSM / OSM transparente / Nombres) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
+st.sidebar.caption("El cambio de mapa base (Esri / Topográfico / Base OSM / OSM transparente) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
 st.sidebar.caption(
     "**Fuentes y créditos**  \n"
-    "Base: © colaboradores de OpenStreetMap · Nombres y límites: © Esri  \n"
+    "Base: © colaboradores de OpenStreetMap  \n"
     "Topografía: © colaboradores de OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)  \n"
     "Imagen: © Esri, Maxar, Earthstar Geographics  \n"
     "Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST  \n"
