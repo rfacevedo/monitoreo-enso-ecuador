@@ -117,7 +117,7 @@ CESIUM_HTML_TEMPLATE = """
     font-weight: 600; padding: 7px 10px 7px 4px; outline: none; color-scheme: dark; }
   #estado { color: #fff; font-size: 12px; background: rgba(29,53,87,.92); padding: 6px 10px;
     border-radius: 8px; display: none; }
-  .leyenda { position: absolute; bottom: 34px; z-index: 10; background: rgba(29,53,87,.92);
+  .leyenda { position: absolute; bottom: 52px; z-index: 10; background: rgba(29,53,87,.92);
     color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.7; }
   /* Mapas base apilados: Esri arriba, OSM debajo, del mismo ancho */
   #grpBase { flex-direction: column; align-items: stretch; }
@@ -129,14 +129,15 @@ CESIUM_HTML_TEMPLATE = """
   #grpVista button { padding: 5px 0; min-width: 40px; font-size: 14px; }
   .cesium-infoBox { right: 58px !important; }   /* la ficha de información no tapa la columna */
   #grpVista button + button { border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
-  /* Controles del pronóstico mensual (▶ + línea de tiempo), en la barra superior izquierda */
-  #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; }
-  #btnPlay { width: 34px; height: 34px; border: 0; background: #2563EB; color: #fff; cursor: pointer;
+  /* Controles del pronóstico (▶ + línea de tiempo): barra al pie del mapa, centrada */
+  #boxTiempo { display: none; position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+    z-index: 12; width: min(680px, calc(100% - 340px)); min-width: 300px; align-items: center; padding: 0 8px 0 0; }
+  #btnPlay { flex: 0 0 auto; width: 34px; height: 34px; border: 0; background: #2563EB; color: #fff; cursor: pointer;
     font-size: 14px; line-height: 1; padding: 0; margin-right: 8px; }
   #btnPlay:hover { background: #1D4ED8; }
-  #slotTimeline { position: relative; width: 340px; height: 27px; }
+  #slotTimeline { position: relative; flex: 1 1 auto; min-width: 0; height: 27px; }
   #slotTimeline .cesium-viewer-timelineContainer { position: relative !important; left: 0 !important;
-    right: auto !important; bottom: auto !important; width: 340px; height: 27px; }
+    right: auto !important; bottom: auto !important; width: 100% !important; height: 27px; }
   #leyenda { left: 10px; }
   #leyendaNoaa { right: 10px; display: none; max-width: 230px; }
   .leyenda i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px;
@@ -184,16 +185,16 @@ CESIUM_HTML_TEMPLATE = """
     <label for="selMes" id="lblMes">Mes</label>
     <select id="selMes"></select>
   </div>
-  <div class="grupo" id="boxTiempo">
-    <button id="btnPlay" type="button" title="Reproducir" aria-label="Reproducir">&#9654;</button>
-    <div id="slotTimeline"></div>
-  </div>
   <div class="grupo" id="boxFecha" style="display:none">
     <label for="inpFecha">Fecha</label>
     <input type="date" id="inpFecha">
   </div>
   <div class="grupo"><button id="btnHome">Inicio</button></div>
   <span id="estado"></span>
+</div>
+<div class="grupo" id="boxTiempo">
+  <button id="btnPlay" type="button" title="Reproducir" aria-label="Reproducir">&#9654;</button>
+  <div id="slotTimeline"></div>
 </div>
 <div class="grupo" id="grpVista">
   <label>Vista</label>
@@ -600,6 +601,9 @@ CESIUM_HTML_TEMPLATE = """
     boxMes.style.display = cfg.selector === false ? 'none' : 'flex';
     irAIndice(Math.min(Math.max(cfg.idx, 0), n - 1));
   }
+  window.addEventListener('resize', function () {
+    if (tiempo) { viewer.timeline.resize(); }
+  });
   btnPlay.onclick = function () {
     if (timerTiempo) { detenerTiempo(); return; }
     if (!tiempo) { return; }
