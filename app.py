@@ -597,7 +597,7 @@ umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
 
 st.sidebar.markdown(
     '<p style="margin-top:6px;">Autor: <b>Raúl Acevedo</b><br>'
-    '<a href="https://www.linkedin.com/in/raul-acevedo-5aba97441/" target="_blank" '
+    '<a href="https://www.linkedin.com/in/raul-acevedo-76360130/" target="_blank" '
     'rel="noopener noreferrer" style="color:#7DD3FC !important;">LinkedIn</a></p>',
     unsafe_allow_html=True,
 )
