@@ -925,7 +925,7 @@ st.sidebar.markdown(
     '<p class="titulo-lateral">⛈️ Panel de Alerta Temprana y Riesgo de Inundación (ENSO)</p>',
     unsafe_allow_html=True,
 )
-st.sidebar.header("⚙️ Filtros del Modelo")
+st.sidebar.header("⚙️ Filtros por fechas de inundación")
 fecha_inicio = st.sidebar.date_input("Fecha Inicial", datetime.date(2026, 11, 1))
 fecha_fin = st.sidebar.date_input("Fecha de Proyección", datetime.date(2027, 2, 1))
 umbral_riesgo = st.sidebar.slider("Índice de Riesgo Mínimo", 0.0, 1.0, 0.40)
@@ -966,7 +966,6 @@ df_mapa_reciente = df_filtrado.sort_values('fecha').groupby('canton').last().res
 # ==========================================
 # 5. VISOR GEOGRÁFICO PRINCIPAL (CESIUM 2D/3D)
 # ==========================================
-st.subheader("📍 Visor Geográfico Interactivo (Cesium 3D)")
 render_cesium(df_mapa_reciente, alto=560)
 
 # ==========================================
