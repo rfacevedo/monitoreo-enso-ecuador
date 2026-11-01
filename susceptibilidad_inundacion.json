@@ -1,0 +1,27 @@
+{
+ "extension": {
+  "oeste": -81.1,
+  "sur": -4.0,
+  "este": -78.3,
+  "norte": 1.5
+ },
+ "paso_grados": 0.001388888888888889,
+ "tamano_px": [
+  2016,
+  3960
+ ],
+ "porcentaje_de_tierra_por_clase": {
+  "baja": 89.3,
+  "media": 5.1,
+  "alta": 5.6
+ },
+ "pesos": {
+  "topografia": 0.65,
+  "mar": 0.35
+ },
+ "umbrales": {
+  "media": 0.45,
+  "alta": 0.7
+ },
+ "fuente": "Copernicus DEM GLO-30 (ESA) vía AWS Open Data"
+}

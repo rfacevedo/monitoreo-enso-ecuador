@@ -191,6 +191,9 @@ CESIUM_HTML_TEMPLATE = """
         <option value="nubes">Nubes / vapor de agua (GOES)</option>
         <option value="sst">Temp. superficie del mar (GFS)</option>
       </optgroup>
+      <optgroup label="Terreno (Copernicus DEM)">
+        <option value="susc">Susceptibilidad a inundación (terreno)</option>
+      </optgroup>
       <optgroup label="Pronóstico estacional CCSR/IRI">
         <option value="c_pr">CCSR/IRI Precipitación (CFSv2)</option>
         <option value="c_tas">CCSR/IRI Temperatura (CFSv2)</option>
@@ -396,6 +399,30 @@ CESIUM_HTML_TEMPLATE = """
     inpFecha.value = f(2);   // las capas diarias de GIBS llegan con 1-3 días de retraso
   })();
 
+  // Susceptibilidad estructural a inundación: imagen fija generada con generar_susceptibilidad.py (Copernicus DEM GLO-30)
+  const SUSC = {
+    url: 'https://raw.githubusercontent.com/rfacevedo/monitoreo-enso-ecuador/main/susceptibilidad_inundacion.png',
+    rect: [-81.1, -4.0, -78.3, 1.5],
+    leyenda: '<b>Susceptibilidad a inundación</b>' +
+      '<div><span class="sw" style="background:#dc2626"></span> Alta</div>' +
+      '<div><span class="sw" style="background:#facc15"></span> Media</div>' +
+      '<div><span class="sw" style="background:#22c55e;opacity:.4"></span> Baja (casi transparente)</div>' +
+      '<small>Terreno, no pronóstico: dónde el suelo se inunda con más facilidad (altura, relieve local, pendiente y cercanía al mar o estuario). ' +
+      'Copernicus DEM GLO-30 © ESA, ~150 m. Indicativo, sin validar con inundaciones reales.</small>'
+  };
+  let capaSusc = null;
+  function quitarSusc() {
+    if (capaSusc) { viewer.imageryLayers.remove(capaSusc, true); capaSusc = null; }
+  }
+  function ponerSusc() {
+    quitarSusc();
+    capaSusc = viewer.imageryLayers.addImageryProvider(new Cesium.SingleTileImageryProvider({
+      url: SUSC.url, rectangle: Cesium.Rectangle.fromDegrees(SUSC.rect[0], SUSC.rect[1], SUSC.rect[2], SUSC.rect[3]),
+      credit: 'Copernicus DEM GLO-30 © ESA'
+    }));
+    capaSusc.alpha = 0.85;
+    viewer.scene.requestRender();
+  }
   function quitarModis() {
     if (capaModis) { viewer.imageryLayers.remove(capaModis, true); capaModis = null; }
   }
@@ -778,12 +805,18 @@ CESIUM_HTML_TEMPLATE = """
     quitarTiempo();
     quitarWms();
     quitarModis();
+    quitarSusc();
     fuenteGfs.entities.removeAll();
     fuenteCcsr.entities.removeAll();
     boxFecha.style.display = 'none';
     setEstado('');
     if (sel === 'none') {
       leyendaNoaa.style.display = 'none';
+    } else if (sel === 'susc') {
+      leyendaNoaa.innerHTML = SUSC.leyenda;
+      leyendaNoaa.style.display = 'block';
+      ponerSusc();
+      viewer.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(-81.1, -3.2, -78.6, 1.2), duration: 1.5 });
     } else if (CCSR[sel]) {
       setEstado('Cargando pronóstico CCSR/IRI (CFSv2)…');
       cargarCcsr().then(function () {
@@ -1390,6 +1423,7 @@ st.sidebar.caption(
     "Topografía: © colaboradores de OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)  \n"
     "Imagen: © Esri, Maxar, Earthstar Geographics  \n"
     "Predicción: NOAA GFS (vía Open-Meteo) y NOAA nowCOAST  \n"
+    "Susceptibilidad a inundación: Copernicus DEM GLO-30 © ESA (AWS Open Data)  \n"
     "ENSO: NOAA CPC (ONI, Niño) · INOCAR (informe ERFEN) · CIIFEN (boletín El Niño/La Niña)  \n"
     "Pronóstico estacional: CCSR/IRI, Columbia Climate School (CFSv2 de NOAA/NCEP)  \n"
     "Satélite: NASA GIBS / MODIS  \n"

@@ -35,6 +35,10 @@ Proyecto GeoCiencias — Mentor: Raúl Acevedo.
   de la app (archivos en el repositorio o una base externa).
 - `climatologia.json` — estadísticas locales de lluvia (se regenera con `python generar_climatologia.py`, ~30 min).
 - `ecuador_perfil.py` — contorno de Ecuador (geoBoundaries, CC0).
+- `generar_susceptibilidad.py` — genera la capa de **susceptibilidad estructural a inundación** (`susceptibilidad_inundacion.tif/.png/.json`)
+  con el Copernicus DEM GLO-30 (altura, relieve local, pendiente y cercanía al mar/estuario; requiere `rasterio`, `scipy`, `Pillow`).
+  Es terreno, no pronóstico: indica *dónde* se inunda con más facilidad; el modelo por cantón dice *cuándo*. Adaptada del
+  análisis ponderado de `geotif.py`, reemplazando los ráster simulados por datos reales. Indicativa, sin validar con inundaciones reales.
 - `test_fuentes_modelo.py` — pruebas sin red: `python -m unittest test_fuentes_modelo -v`.
 
 ## Ejecutar

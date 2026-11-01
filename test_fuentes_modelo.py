@@ -1,3 +1,4 @@
+import os
 """Pruebas sin red de los lectores de fuentes y del modelo de riesgo.
 
 Ejecutar:  python -m unittest test_fuentes_modelo -v
@@ -277,6 +278,42 @@ class PruebasModelo(unittest.TestCase):
     def test_sin_fuentes_no_rompe(self):
         regs, enso = mr.construir_registros({}, hoy=datetime.date(2026, 11, 1))
         self.assertEqual((regs, enso), ([], 0.0))
+
+
+class TestSusceptibilidad(unittest.TestCase):
+    """La capa de susceptibilidad a inundación (generar_susceptibilidad.py) y su archivo de metadatos."""
+
+    def test_json_coherente(self):
+        import json
+        with open(os.path.join(os.path.dirname(__file__), "susceptibilidad_inundacion.json"), encoding="utf-8") as f:
+            j = json.load(f)
+        e = j["extension"]
+        self.assertEqual((e["oeste"], e["sur"], e["este"], e["norte"]), (-81.1, -4.0, -78.3, 1.5))
+        pct = j["porcentaje_de_tierra_por_clase"]
+        self.assertAlmostEqual(sum(pct.values()), 100.0, delta=0.5)
+        self.assertGreater(pct["baja"], pct["media"])
+        self.assertLess(max(j["tamano_px"]), 4096)          # límite de textura de WebGL
+
+    def test_png_tamano_y_colores(self):
+        from PIL import Image
+        with Image.open(os.path.join(os.path.dirname(__file__), "susceptibilidad_inundacion.png")) as im:
+            self.assertEqual(im.mode, "RGBA")
+            self.assertLess(max(im.size), 4096)
+
+    def test_calculo_sintetico(self):
+        try:
+            import numpy as np
+            import generar_susceptibilidad as g
+        except ImportError:
+            self.skipTest("requiere rasterio, scipy y numpy (solo para regenerar la capa)")
+        dem = np.zeros((120, 120), np.float32)
+        dem[:, :20] = 0.0                                  # mar al oeste
+        dem[:, 20:60] = 2.0                                # llanura baja junto al mar
+        dem[:, 60:] = 400.0                                # tierras altas
+        clases, indice, tierra = g.calcular(dem)
+        self.assertEqual(clases[60, 5], 0)                 # mar
+        self.assertEqual(clases[60, 30], 3)                # llanura costera: alta
+        self.assertEqual(clases[60, 100], 1)               # altura: baja
 
 
 if __name__ == "__main__":
