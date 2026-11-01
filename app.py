@@ -1112,6 +1112,7 @@ CESIUM_HTML_TEMPLATE = """
     coincidencias = buscarCoincidencias(txtBuscar.value);
     indiceSel = -1;
     pintarLista();
+    if (coincidencias.length) { resBuscar.textContent = ''; }   // quita el aviso o la ficha anteriores
     if (txtBuscar.value.trim() && !coincidencias.length) { mensaje('No se encontró «' + txtBuscar.value.trim() + '» entre los cantones de la Costa.'); }
     else if (!txtBuscar.value.trim()) { resBuscar.textContent = ''; }
     // Ubicación automática: si el texto coincide con un solo cantón, se marca solo (tras una breve pausa al escribir)
