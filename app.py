@@ -156,6 +156,7 @@ CESIUM_HTML_TEMPLATE = """
     <button id="btnEsri" class="activo">Imagen (Esri)</button>
     <button id="btnTopo">Topográfico (OSM)</button>
     <button id="btnOSM">Base (OSM)</button>
+    <button id="btnOSMt">OSM transparente</button>
   </div>
   <div class="grupo">
     <label for="selCapa">Capa</label>
@@ -265,10 +266,16 @@ CESIUM_HTML_TEMPLATE = """
   const OPACIDAD_BASE = 0.9;
   [capaEsri, capaTopo, capaOSM].forEach(function (l) { l.alpha = OPACIDAD_BASE; });
 
+  // OSM transparente: la imagen de Esri queda debajo y el OSM estándar encima al 50 %, de modo que se ven calles y
+  // nombres sobre la imagen satelital (OSM no publica teselas transparentes propias; la mezcla se hace aquí).
+  const OPACIDAD_OSM_TRANSPARENTE = 0.5;
+
   function setBase(base) {
-    capaOSM.show = base === 'osm';
+    capaOSM.show = base === 'osm' || base === 'osmt';
+    capaOSM.alpha = base === 'osmt' ? OPACIDAD_OSM_TRANSPARENTE : OPACIDAD_BASE;
     capaTopo.show = base === 'topo';
-    capaEsri.show = base === 'esri';
+    capaEsri.show = base === 'esri' || base === 'osmt';
+    document.getElementById('btnOSMt').classList.toggle('activo', base === 'osmt');
     document.getElementById('btnOSM').classList.toggle('activo', base === 'osm');
     document.getElementById('btnTopo').classList.toggle('activo', base === 'topo');
     document.getElementById('btnEsri').classList.toggle('activo', base === 'esri');
@@ -906,6 +913,7 @@ CESIUM_HTML_TEMPLATE = """
 
   document.getElementById('btnTopo').onclick = function () { setBase('topo'); };
   document.getElementById('btnOSM').onclick = function () { setBase('osm'); };
+  document.getElementById('btnOSMt').onclick = function () { setBase('osmt'); };
   document.getElementById('btnEsri').onclick = function () { setBase('esri'); };
   document.getElementById('btnHome').onclick = function () { irAInicio(1.2); };
 
@@ -1184,7 +1192,7 @@ if st.sidebar.button("🔄 Actualizar datos"):
 
 st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Geográfico")
-st.sidebar.caption("El cambio de mapa base (Esri / Topográfico / Base OSM) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
+st.sidebar.caption("El cambio de mapa base (Esri / Topográfico / Base OSM / OSM transparente) y las capas NOAA (lluvia, viento) y satélite MODIS están dentro del visor.")
 st.sidebar.caption(
     "**Fuentes y créditos**  \n"
     "Base: © colaboradores de OpenStreetMap  \n"
