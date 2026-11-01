@@ -84,13 +84,14 @@ CESIUM_HTML_TEMPLATE = """
   #grpBase { flex-direction: column; align-items: stretch; }
   #grpBase button { text-align: left; }
   #grpBase button + button { border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
-  /* Controles de vista: columna pegada al extremo izquierdo del visor, bajo los mapas base */
-  #grpVista { position: absolute; left: 0; top: 104px; flex-direction: column; align-items: stretch; }
-  #grpVista label { padding: 6px 0 4px; text-align: center; }
-  #grpVista button { padding: 7px 0; min-width: 40px; font-size: 14px; }
+  /* Controles de vista: columna pegada al extremo derecho del visor, bajo el botón de pantalla completa */
+  #grpVista { position: absolute; right: 10px; top: 46px; z-index: 10; flex-direction: column; align-items: stretch; }
+  #grpVista label { padding: 4px 0 3px; text-align: center; }
+  #grpVista button { padding: 5px 0; min-width: 40px; font-size: 14px; }
+  .cesium-infoBox { right: 58px !important; }   /* la ficha de información no tapa la columna */
   #grpVista button + button { border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
   /* Controles del pronóstico mensual (▶ + línea de tiempo), en la barra superior izquierda */
-  #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; margin-left: 50px; }  /* libra la columna Vista */
+  #boxTiempo { display: none; align-items: center; padding: 0 8px 0 0; }
   #btnPlay { width: 34px; height: 34px; border: 0; background: #2563EB; color: #fff; cursor: pointer;
     font-size: 14px; line-height: 1; padding: 0; margin-right: 8px; }
   #btnPlay:hover { background: #1D4ED8; }
@@ -156,17 +157,17 @@ CESIUM_HTML_TEMPLATE = """
     <select id="selDia"></select>
   </div>
   <div class="grupo"><button id="btnHome">Inicio</button></div>
-  <div class="grupo" id="grpVista">
-    <label>Vista</label>
-    <button id="vInclinar" type="button" title="Inclinar: ver más horizonte" aria-label="Inclinar">&#9650;</button>
-    <button id="vEnderezar" type="button" title="Enderezar: ver desde arriba" aria-label="Enderezar">&#9660;</button>
-    <button id="vGirarIzq" type="button" title="Girar a la izquierda" aria-label="Girar a la izquierda">&#10226;</button>
-    <button id="vGirarDer" type="button" title="Girar a la derecha" aria-label="Girar a la derecha">&#10227;</button>
-    <button id="vZoomMas" type="button" title="Acercar" aria-label="Acercar">+</button>
-    <button id="vZoomMenos" type="button" title="Alejar" aria-label="Alejar">&minus;</button>
-    <button id="vNorte" type="button" title="Norte arriba y vista cenital" aria-label="Norte arriba">N</button>
-  </div>
   <span id="estado"></span>
+</div>
+<div class="grupo" id="grpVista">
+  <label>Vista</label>
+  <button id="vInclinar" type="button" title="Inclinar: ver más horizonte" aria-label="Inclinar">&#9650;</button>
+  <button id="vEnderezar" type="button" title="Enderezar: ver desde arriba" aria-label="Enderezar">&#9660;</button>
+  <button id="vGirarIzq" type="button" title="Girar a la izquierda" aria-label="Girar a la izquierda">&#10226;</button>
+  <button id="vGirarDer" type="button" title="Girar a la derecha" aria-label="Girar a la derecha">&#10227;</button>
+  <button id="vZoomMas" type="button" title="Acercar" aria-label="Acercar">+</button>
+  <button id="vZoomMenos" type="button" title="Alejar" aria-label="Alejar">&minus;</button>
+  <button id="vNorte" type="button" title="Norte arriba y vista cenital" aria-label="Norte arriba">N</button>
 </div>
 <div class="leyenda" id="leyenda"></div>
 <div class="leyenda" id="leyendaNoaa"></div>
