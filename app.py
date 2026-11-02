@@ -89,6 +89,16 @@ def fecha_actual_ecuador():
 # ==========================================
 # Plantilla HTML plana (sin f-string) para no chocar con las llaves de JS/CSS.
 # Sin Cesium ion: ninguna capa necesita token. Topología = OSM, imagen = Esri.
+@st.cache_resource
+def _susceptibilidad_uri():
+    """Capa de susceptibilidad a inundación como data URI (el repositorio es privado: una URL raw de GitHub daría 404)."""
+    try:
+        datos = (Path(__file__).with_name("susceptibilidad_inundacion.png")).read_bytes()
+    except OSError:
+        return ""
+    return "data:image/png;base64," + base64.b64encode(datos).decode("ascii")
+
+
 CESIUM_HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="es">
@@ -401,7 +411,7 @@ CESIUM_HTML_TEMPLATE = """
 
   // Susceptibilidad estructural a inundación: imagen fija generada con generar_susceptibilidad.py (Copernicus DEM GLO-30)
   const SUSC = {
-    url: 'https://raw.githubusercontent.com/rfacevedo/monitoreo-enso-ecuador/main/susceptibilidad_inundacion.png',
+    url: '__SUSC__',                 // imagen incrustada (data URI): el repositorio es privado, no sirve una URL raw
     rect: [-81.1, -4.0, -78.3, 1.5],
     leyenda: '<b>Susceptibilidad a inundación</b>' +
       '<div><span class="sw" style="background:#dc2626"></span> Alta</div>' +
@@ -1203,6 +1213,7 @@ def render_cesium(df, alto=560):
         .replace("__PERFIL__", json.dumps(ECUADOR_PERFIL, separators=(",", ":")))
         .replace("__CANTONES__", json.dumps(CANTONES_COSTA, ensure_ascii=False, separators=(",", ":")))
         .replace("__RIESGOS__", json.dumps(riesgos, ensure_ascii=False, separators=(",", ":")))
+        .replace("__SUSC__", _susceptibilidad_uri())
     )
     components.html(html, height=alto, scrolling=False)
 
