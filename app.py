@@ -91,7 +91,9 @@ def fecha_actual_ecuador():
 # Sin Cesium ion: ninguna capa necesita token. Topología = OSM, imagen = Esri.
 @st.cache_resource
 def _susceptibilidad_uri():
-    """Capa de susceptibilidad a inundación como data URI (el repositorio es privado: una URL raw de GitHub daría 404)."""
+    """Capa de susceptibilidad a inundación como data URI (el repositorio es privado: una URL raw de GitHub daría 404).
+
+    Se guarda en caché de recurso: la imagen (~220 KB) se lee y codifica una sola vez por proceso."""
     try:
         datos = (Path(__file__).with_name("susceptibilidad_inundacion.png")).read_bytes()
     except OSError:
