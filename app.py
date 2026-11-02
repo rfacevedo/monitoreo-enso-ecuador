@@ -93,7 +93,7 @@ def fecha_actual_ecuador():
 def _susceptibilidad_uri():
     """Capa de susceptibilidad a inundación como data URI (el repositorio es privado: una URL raw de GitHub daría 404).
 
-    Se guarda en caché de recurso: la imagen (~220 KB) se lee y codifica una sola vez por proceso."""
+    Se guarda en caché de recurso: la imagen (~220 KB) se lee y codifica una sola vez por proceso (no hace falta acceso a GitHub en tiempo de ejecución)."""
     try:
         datos = (Path(__file__).with_name("susceptibilidad_inundacion.png")).read_bytes()
     except OSError:
