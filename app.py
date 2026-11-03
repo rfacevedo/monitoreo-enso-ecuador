@@ -1267,6 +1267,14 @@ st.markdown(
     [data-testid="stSidebar"] .stButton button p, [data-testid="stSidebar"] [data-testid^="stBaseButton"] p { color: #1D3557 !important; }
     [data-testid="stSidebar"] .panel-enso { font-size: 13px; line-height: 1.55; }
     [data-testid="stSidebar"] .panel-enso small { color: #CBD5E1; }
+    /* Sin accesos a GitHub para los visitantes: se oculta la barra de acciones de Streamlit Cloud (Compartir, favorito,
+       «editar», icono de GitHub), el botón Deploy y cualquier enlace al repositorio. Es solo visual: no protege el código. */
+    [data-testid="stToolbarActions"], [data-testid="stAppDeployButton"], [data-testid="stToolbarActionButton"],
+    [data-testid="stBaseButton-header"], [data-testid="stStatusWidget"],
+    a[href*="github.com"], a[href*="githubusercontent.com"], [aria-label*="github" i], [aria-label="edit"], [aria-label="favorite"],
+    [class*="viewerBadge"], [class*="ViewerBadge"], a[href*="streamlit.io/cloud"], a[href^="https://share.streamlit.io"] {
+        display: none !important; visibility: hidden !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
