@@ -165,24 +165,28 @@ def exportar_semilla(ruta=None):
 
 
 def importar_semilla(ruta=None):
-    """Carga la semilla en el almacén SIN pisar nada: solo agrega las fuentes que faltan y las series si están vacías.
-    Devuelve cuántas fuentes agregó (0 si no hay archivo)."""
+    """Carga la semilla en el almacén. Agrega las fuentes que faltan y REEMPLAZA las que la semilla tiene más recientes
+    (la tarea diaria de GitHub Actions la renueva); nunca pisa un dato más nuevo del almacén. Las series del ENSO se cargan si
+    están vacías o si la semilla trae una fuente «noaa» más reciente. Devuelve cuántas fuentes agregó o reemplazó."""
     try:
         datos = json.loads(Path(ruta or SEMILLA).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return 0
-    agregadas = 0
+    cambiadas = 0
+    renovar_series = False
     with conectar() as con:
         for f in datos.get("fuente", []):
-            antes = con.total_changes
-            con.execute("INSERT OR IGNORE INTO fuente (nombre, descargado_utc, clave, datos) VALUES (?,?,?,?)",
-                        (f["nombre"], f["descargado_utc"], f["clave"], f["datos"]))
-            agregadas += con.total_changes - antes
-        if con.execute("SELECT COUNT(*) FROM oni").fetchone()[0] == 0:
+            actual = con.execute("SELECT descargado_utc FROM fuente WHERE nombre=?", (f["nombre"],)).fetchone()
+            if actual is None or actual["descargado_utc"] < f["descargado_utc"]:     # ISO 8601 en UTC: se ordena como texto
+                con.execute("INSERT OR REPLACE INTO fuente (nombre, descargado_utc, clave, datos) VALUES (?,?,?,?)",
+                            (f["nombre"], f["descargado_utc"], f["clave"], f["datos"]))
+                cambiadas += 1
+                renovar_series = renovar_series or f["nombre"] == "noaa"
+        if renovar_series or con.execute("SELECT COUNT(*) FROM oni").fetchone()[0] == 0:
             con.executemany("INSERT OR REPLACE INTO oni VALUES (?,?,?)", datos.get("oni", []))
-        if con.execute("SELECT COUNT(*) FROM nino_semanal").fetchone()[0] == 0:
+        if renovar_series or con.execute("SELECT COUNT(*) FROM nino_semanal").fetchone()[0] == 0:
             con.executemany("INSERT OR REPLACE INTO nino_semanal VALUES (?,?,?,?,?)", datos.get("nino_semanal", []))
-    return agregadas
+    return cambiadas
 
 
 def resumen():

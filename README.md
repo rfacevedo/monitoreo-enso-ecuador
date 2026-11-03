@@ -35,7 +35,11 @@ Proyecto GeoCiencias — Mentor: Raúl Acevedo.
   (las series del ENSO se vuelven a descargar completas). Para un histórico permanente habría que guardar los datos fuera
   de la app (archivos en el repositorio o una base externa).
 - `datos_semilla.json` — instantánea de las fuentes y de las series del ENSO para arrancar sin descargar. Se regenera con
-  `python -c "import fuentes_datos as f, almacen as a, modelo_riesgo as m; f.actualizar_todo(m.CANTONES); a.exportar_semilla()"` y se sube al repositorio.
+  `python actualizar_semilla.py` y se sube al repositorio (la tarea diaria lo hace sola).
+- `actualizar_semilla.py` + `.github/workflows/actualizar_datos.yml` — **tarea diaria (GitHub Actions, 06:00 hora de Ecuador)**: descarga las
+  fuentes y renueva `datos_semilla.json`, así la app muestra siempre los datos del día aunque nadie pulse «Actualizar datos». La app usa la
+  semilla si es más reciente que lo guardado en el servidor. Además, mientras la app esté despierta, un hilo renueva los datos al cambiar el día.
+  Se puede lanzar a mano en la pestaña Actions → «Actualizar datos del día» → Run workflow.
 - `climatologia.json` — estadísticas locales de lluvia (se regenera con `python generar_climatologia.py`, ~30 min).
 - `ecuador_perfil.py` — contorno de Ecuador (geoBoundaries, CC0).
 - `generar_susceptibilidad.py` — genera la capa de **susceptibilidad estructural a inundación** (`susceptibilidad_inundacion.tif/.png/.json`)

@@ -1286,6 +1286,13 @@ def cargar_datos_reales():
     return datos
 
 
+@st.cache_resource
+def _actualizador_diario():
+    """Hilo en segundo plano que renueva los datos cuando cambia el día (solo mientras la app esté despierta). Se crea una sola
+    vez por proceso; los módulos se recargan en cada ejecución, por eso se guarda aquí y no en el módulo."""
+    return fuentes_datos.iniciar_actualizador_diario(CANTONES, al_actualizar=st.cache_data.clear)
+
+
 def categoria_oni(valor):
     """Categorías de NOAA para el ONI."""
     if valor >= 2.0:
@@ -1346,6 +1353,7 @@ def panel_enso_html(datos, indice_enso):
     return '<div class="panel-enso">' + "<br>".join(lineas) + "</div>"
 
 
+_actualizador_diario()
 try:
     DATOS = cargar_datos_reales()
 except Exception as exc:  # noqa: BLE001

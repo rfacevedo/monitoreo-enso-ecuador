@@ -254,6 +254,75 @@ class PruebasSinDescargaAlEntrar(unittest.TestCase):
         self.assertGreater(len(semilla["nino_semanal"]), 2000)
 
 
+class PruebasActualizacionDiaria(unittest.TestCase):
+    def setUp(self):
+        self.ruta = almacen.RUTA
+        almacen.RUTA = Path(tempfile.mkdtemp()) / "diaria.sqlite"
+
+    def tearDown(self):
+        almacen.RUTA = self.ruta
+
+    def test_toca_actualizar_solo_al_cambiar_el_dia_en_ecuador(self):
+        utc = datetime.timezone.utc
+        ayer = datetime.datetime(2026, 11, 2, 20, 0, tzinfo=utc)                  # 15:00 del 2 en Ecuador
+        self.assertFalse(fd.toca_actualizar(ayer, datetime.datetime(2026, 11, 3, 9, 0, tzinfo=utc)))    # 04:00 del 3: aún no
+        self.assertTrue(fd.toca_actualizar(ayer, datetime.datetime(2026, 11, 3, 10, 30, tzinfo=utc)))   # 05:30 del 3: toca
+        self.assertFalse(fd.toca_actualizar(datetime.datetime(2026, 11, 3, 10, 40, tzinfo=utc),
+                                            datetime.datetime(2026, 11, 3, 22, 0, tzinfo=utc)))        # ya es de hoy
+        self.assertTrue(fd.toca_actualizar(None, datetime.datetime(2026, 11, 3, 12, 0, tzinfo=utc)))     # sin datos y de día
+        # 03:00 UTC del 3 = 22:00 del 2 en Ecuador: sigue siendo el mismo día
+        self.assertFalse(fd.toca_actualizar(ayer, datetime.datetime(2026, 11, 3, 3, 0, tzinfo=utc)))
+
+    def test_semilla_mas_nueva_reemplaza_y_la_mas_vieja_no(self):
+        semilla = Path(tempfile.mkdtemp()) / "semilla.json"
+        viejo = datetime.datetime(2026, 11, 1, tzinfo=datetime.timezone.utc)
+        nuevo = datetime.datetime(2026, 11, 3, tzinfo=datetime.timezone.utc)
+        almacen.guardar_fuente("erfen", {"nivel_mar_cm": 10.0}, None, nuevo)
+        almacen.exportar_semilla(semilla)                                     # semilla con el dato NUEVO (10 cm)
+        almacen.guardar_fuente("erfen", {"nivel_mar_cm": 99.0}, None, nuevo + datetime.timedelta(days=1))
+        self.assertEqual(almacen.importar_semilla(semilla), 0)               # el almacén tiene algo más nuevo: no se pisa
+        self.assertEqual(almacen.leer_fuente("erfen")[0]["nivel_mar_cm"], 99.0)
+        almacen.guardar_fuente("erfen", {"nivel_mar_cm": 1.0}, None, viejo)  # el almacén tiene algo más viejo
+        self.assertEqual(almacen.importar_semilla(semilla), 1)
+        self.assertEqual(almacen.leer_fuente("erfen")[0]["nivel_mar_cm"], 10.0)
+
+    def test_hilo_diario_actualiza_cuando_cambia_el_dia(self):
+        llamadas, avisos = [], []
+        originales = (fd.actualizar_todo, fd._ultima_descarga, fd.toca_actualizar, fd._ACTUALIZADOR["hilo"])
+        try:
+            fd._ACTUALIZADOR["hilo"] = None
+            fd._ultima_descarga = lambda c: None
+            fd.toca_actualizar = lambda ultima, ahora=None: True
+            fd.actualizar_todo = lambda c: llamadas.append(1) or {"ok": 1}
+            hilo = fd.iniciar_actualizador_diario(mr.CANTONES, al_actualizar=lambda: avisos.append(1), cada_s=0.05, espera_inicial_s=0)
+            self.assertIs(fd.iniciar_actualizador_diario(mr.CANTONES), hilo)    # una sola vez por proceso
+            import time
+            for _ in range(60):
+                if llamadas and avisos:
+                    break
+                time.sleep(0.05)
+            hilo.parar.set()
+            hilo.join(2)
+            self.assertTrue(llamadas and avisos)
+        finally:
+            (fd.actualizar_todo, fd._ultima_descarga, fd.toca_actualizar, fd._ACTUALIZADOR["hilo"]) = originales
+
+    def test_actualizar_semilla_conserva_la_semilla_si_falla_la_lluvia(self):
+        import subprocess, sys, os
+        raiz = Path(__file__).parent
+        copia = Path(tempfile.mkdtemp())
+        for f in ("actualizar_semilla.py", "almacen.py", "fuentes_datos.py", "modelo_riesgo.py", "cantones_costa.py", "climatologia.json", "datos_semilla.json"):
+            (copia / f).write_bytes((raiz / f).read_bytes())
+        antes = (copia / "datos_semilla.json").read_bytes()
+        sitecustomize = copia / "sitecustomize.py"                              # sin red: toda petición HTTP falla
+        sitecustomize.write_text("import requests\ndef _f(*a, **k):\n    raise RuntimeError('sin red')\nrequests.get = _f\n")
+        r = subprocess.run([sys.executable, "actualizar_semilla.py"], cwd=copia, capture_output=True, text=True, timeout=120,
+                           env={**os.environ, "PYTHONPATH": str(copia)})
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)                 # la lluvia sale «respaldo», no «ok»: error
+        self.assertIn("respaldo", r.stdout)
+        self.assertEqual((copia / "datos_semilla.json").read_bytes(), antes)
+
+
 class PruebasBuscadorCantones(unittest.TestCase):
     def test_datos_del_buscador(self):
         lista = cc.CANTONES_COSTA

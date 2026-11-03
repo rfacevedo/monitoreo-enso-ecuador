@@ -413,3 +413,66 @@ def actualizar_todo(cantones):
         return cargar_todo(cantones, refrescar=True)
     finally:
         _BLOQUEO_DESCARGA.release()
+
+
+# ----------------------------------------------------------------------------------------------
+# Actualización diaria en segundo plano (mientras la app esté despierta)
+# ----------------------------------------------------------------------------------------------
+HORA_ACTUALIZACION = 5            # hora de Ecuador desde la que se renueva el día
+_ACTUALIZADOR = {"hilo": None}
+
+
+def _hoy_ecuador(ahora_utc=None):
+    ahora = ahora_utc or datetime.datetime.now(datetime.timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        return ahora.astimezone(ZoneInfo("America/Guayaquil"))
+    except Exception:  # noqa: BLE001
+        return ahora - datetime.timedelta(hours=5)
+
+
+def toca_actualizar(ultima_descarga_utc, ahora_utc=None):
+    """True si los datos son de un día anterior (hora de Ecuador) y ya pasó la hora de renovarlos."""
+    ahora = _hoy_ecuador(ahora_utc)
+    if ultima_descarga_utc is None:
+        return ahora.hour >= HORA_ACTUALIZACION
+    return ultima_descarga_utc.astimezone(ahora.tzinfo).date() < ahora.date() and ahora.hour >= HORA_ACTUALIZACION
+
+
+def _ultima_descarga(cantones):
+    """Momento de la descarga más antigua entre las fuentes guardadas (None si falta alguna)."""
+    momentos = []
+    for nombre, k in (("noaa", None), ("gfs", _clave_cantones(cantones)), ("cfsv2", _clave_cantones(cantones)),
+                      ("erfen", None), ("ciifen", None)):
+        datos, _ = almacen.leer_fuente(nombre, k)
+        if datos is None:
+            return None
+        momentos.append(datos["_descargado"])
+    return min(momentos)
+
+
+def iniciar_actualizador_diario(cantones, al_actualizar=None, cada_s=1800, espera_inicial_s=90):
+    """Lanza (una sola vez por proceso) un hilo que cada ``cada_s`` segundos comprueba si cambió el día y, si es así,
+    descarga las fuentes y llama a ``al_actualizar`` (p. ej. para vaciar la caché de la app). No descarga al arrancar. Solo
+    corre mientras la app esté despierta: la renovación garantizada la hace la tarea diaria de GitHub Actions."""
+    if _ACTUALIZADOR["hilo"] is not None:
+        return _ACTUALIZADOR["hilo"]
+    parar = threading.Event()
+
+    def ciclo():
+        if parar.wait(espera_inicial_s):
+            return
+        while not parar.is_set():
+            try:
+                if toca_actualizar(_ultima_descarga(cantones)) and not descarga_en_curso():
+                    if actualizar_todo(cantones) is not None and al_actualizar:
+                        al_actualizar()
+            except Exception:  # noqa: BLE001 - el hilo nunca debe morir por un fallo de red
+                pass
+            parar.wait(cada_s)
+
+    hilo = threading.Thread(target=ciclo, name="actualizador-diario", daemon=True)
+    hilo.parar = parar
+    _ACTUALIZADOR["hilo"] = hilo
+    hilo.start()
+    return hilo
