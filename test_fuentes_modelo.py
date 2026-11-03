@@ -15,6 +15,7 @@ import modelo_riesgo as mr
 
 # Las pruebas nunca tocan la base real: usan una SQLite temporal
 almacen.RUTA = Path(tempfile.mkdtemp()) / "prueba.sqlite"
+almacen.SEMILLA = Path(tempfile.mkdtemp()) / "sin_semilla.json"      # las pruebas no usan la semilla real del repositorio
 
 ERFEN_TEXTO = (
     "COMITÉ NACIONAL PARA EL ESTUDIO REGIONAL DEL FENÓMENO EL NIÑO INFORME TÉCNICO EJECUTIVO ERFEN Nro. 011-2026 "
@@ -176,6 +177,81 @@ class PruebasAlmacen(unittest.TestCase):
             self.assertEqual(primera["_cargado"], segunda["_cargado"])   # mismo momento: no se duplica la «foto» del riesgo
         finally:
             (fd.obtener_noaa_enso, fd.obtener_gfs, fd.obtener_cfsv2, fd.obtener_erfen, fd.obtener_ciifen) = originales
+
+
+class PruebasSinDescargaAlEntrar(unittest.TestCase):
+    """Entrar a la aplicación no descarga nada de internet: solo el botón «Actualizar datos» lo hace."""
+
+    def setUp(self):
+        self.llamadas = []
+        self.originales = (fd.obtener_noaa_enso, fd.obtener_gfs, fd.obtener_cfsv2, fd.obtener_erfen, fd.obtener_ciifen)
+        fd.obtener_noaa_enso = lambda: self.llamadas.append("noaa") or {"oni": {"anomalia": 2.0}, "semanal": {"nino12": 4.0}}
+        fd.obtener_gfs = lambda c: self.llamadas.append("gfs") or {"cantones": {}}
+        fd.obtener_cfsv2 = lambda c: self.llamadas.append("cfs") or {"cantones": {}}
+        fd.obtener_erfen = lambda: self.llamadas.append("erfen") or {"nivel_mar_cm": 40.0}
+        fd.obtener_ciifen = lambda: self.llamadas.append("ciifen") or {"estado": "x"}
+        self.ruta = almacen.RUTA
+        almacen.RUTA = Path(tempfile.mkdtemp()) / "entrar.sqlite"          # base limpia para cada prueba
+
+    def tearDown(self):
+        almacen.RUTA = self.ruta
+        (fd.obtener_noaa_enso, fd.obtener_gfs, fd.obtener_cfsv2, fd.obtener_erfen, fd.obtener_ciifen) = self.originales
+
+    def _guardar_antiguo(self, horas):
+        viejo = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=horas)
+        clave = fd._clave_cantones(mr.CANTONES)
+        for nombre, datos, k in (("noaa", {"oni": {"anomalia": 1.0}, "semanal": {"nino12": 2.0}}, None), ("gfs", {"cantones": {}}, clave),
+                                 ("cfsv2", {"cantones": {}}, clave), ("erfen", {"nivel_mar_cm": 10.0}, None), ("ciifen", {"estado": "y"}, None)):
+            almacen.guardar_fuente(nombre, datos, k, viejo)
+
+    def test_dato_muy_antiguo_no_dispara_descarga(self):
+        self._guardar_antiguo(horas=200)                       # más de una semana: antes habría descargado
+        datos = fd.cargar_todo(mr.CANTONES)
+        self.assertEqual(self.llamadas, [])
+        self.assertEqual(datos["erfen"]["nivel_mar_cm"], 10.0)
+        self.assertEqual(datos["erfen"]["_origen"], "sqlite")
+
+    def test_refrescar_descarga_todo(self):
+        self._guardar_antiguo(horas=1)
+        datos = fd.cargar_todo(mr.CANTONES, refrescar=True)
+        self.assertEqual(sorted(self.llamadas), ["cfs", "ciifen", "erfen", "gfs", "noaa"])
+        self.assertEqual(datos["erfen"]["nivel_mar_cm"], 40.0)
+
+    def test_actualizar_todo_no_se_solapa(self):
+        fd._BLOQUEO_DESCARGA.acquire()                         # otro usuario ya está descargando
+        try:
+            self.assertIsNone(fd.actualizar_todo(mr.CANTONES))
+            self.assertTrue(fd.descarga_en_curso())
+        finally:
+            fd._BLOQUEO_DESCARGA.release()
+        self.assertIsNotNone(fd.actualizar_todo(mr.CANTONES))  # libre: descarga
+        self.assertFalse(fd.descarga_en_curso())
+
+    def test_semilla_evita_la_descarga_con_el_almacen_vacio(self):
+        self._guardar_antiguo(horas=5)
+        almacen.guardar_series_enso([(2026, "JAS", 2.1)], [("2026-10-28", 1.0, 2.0, 3.0, 4.0)])
+        semilla = Path(tempfile.mkdtemp()) / "semilla.json"
+        almacen.exportar_semilla(semilla)
+        almacen.RUTA = Path(tempfile.mkdtemp()) / "servidor_nuevo.sqlite"    # servidor recién iniciado: almacén vacío
+        self.assertEqual(almacen.importar_semilla(semilla), 5)
+        self.assertEqual(almacen.importar_semilla(semilla), 0)               # no pisa ni duplica
+        self.assertEqual(almacen.resumen()["oni"], 1)
+        almacen.SEMILLA, previa = semilla, almacen.SEMILLA
+        try:
+            almacen.RUTA = Path(tempfile.mkdtemp()) / "otro_servidor.sqlite"
+            datos = fd.cargar_todo(mr.CANTONES)                              # importa la semilla por su cuenta
+        finally:
+            almacen.SEMILLA = previa
+        self.assertEqual(self.llamadas, [])
+        self.assertEqual(datos["noaa"]["oni"]["anomalia"], 1.0)
+
+    def test_semilla_del_repositorio_es_valida(self):
+        import json
+        with open(Path(__file__).with_name("datos_semilla.json"), encoding="utf-8") as f:
+            semilla = json.load(f)
+        self.assertEqual({x["nombre"] for x in semilla["fuente"]}, {"noaa", "gfs", "cfsv2", "erfen", "ciifen"})
+        self.assertGreater(len(semilla["oni"]), 800)
+        self.assertGreater(len(semilla["nino_semanal"]), 2000)
 
 
 class PruebasBuscadorCantones(unittest.TestCase):

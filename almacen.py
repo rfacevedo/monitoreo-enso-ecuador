@@ -145,6 +145,46 @@ def leer_evolucion_riesgo():
             "GROUP BY descarga_utc, canton ORDER BY descarga_utc")]
 
 
+# ----------------------------------------------------------------------------------------------
+# Semilla: instantánea de los datos para arrancar sin descargar nada
+# ----------------------------------------------------------------------------------------------
+SEMILLA = Path(__file__).with_name("datos_semilla.json")
+
+
+def exportar_semilla(ruta=None):
+    """Guarda en un archivo JSON lo que hay en el almacén (fuentes y series del ENSO). Se sube al repositorio para que un
+    servidor recién iniciado (Streamlit Cloud borra la base al reiniciar) tenga datos al instante, sin descargar."""
+    with conectar() as con:
+        datos = {
+            "fuente": [dict(f) for f in con.execute("SELECT * FROM fuente")],
+            "oni": [list(f) for f in con.execute("SELECT anio, trimestre, anomalia FROM oni")],
+            "nino_semanal": [list(f) for f in con.execute("SELECT * FROM nino_semanal")],
+        }
+    Path(ruta or SEMILLA).write_text(json.dumps(datos, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    return datos
+
+
+def importar_semilla(ruta=None):
+    """Carga la semilla en el almacén SIN pisar nada: solo agrega las fuentes que faltan y las series si están vacías.
+    Devuelve cuántas fuentes agregó (0 si no hay archivo)."""
+    try:
+        datos = json.loads(Path(ruta or SEMILLA).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    agregadas = 0
+    with conectar() as con:
+        for f in datos.get("fuente", []):
+            antes = con.total_changes
+            con.execute("INSERT OR IGNORE INTO fuente (nombre, descargado_utc, clave, datos) VALUES (?,?,?,?)",
+                        (f["nombre"], f["descargado_utc"], f["clave"], f["datos"]))
+            agregadas += con.total_changes - antes
+        if con.execute("SELECT COUNT(*) FROM oni").fetchone()[0] == 0:
+            con.executemany("INSERT OR REPLACE INTO oni VALUES (?,?,?)", datos.get("oni", []))
+        if con.execute("SELECT COUNT(*) FROM nino_semanal").fetchone()[0] == 0:
+            con.executemany("INSERT OR REPLACE INTO nino_semanal VALUES (?,?,?,?,?)", datos.get("nino_semanal", []))
+    return agregadas
+
+
 def resumen():
     """Datos para mostrar el estado del almacén."""
     with conectar() as con:

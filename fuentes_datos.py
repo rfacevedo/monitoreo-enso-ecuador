@@ -18,6 +18,7 @@ import hashlib
 import io
 import re
 import struct
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
@@ -345,12 +346,31 @@ def _clave_cantones(cantones):
     return hashlib.sha1(texto.encode()).hexdigest()[:12]
 
 
-def cargar_todo(cantones, max_edad_s=3 * 3600):
+_BLOQUEO_DESCARGA = threading.Lock()
+
+
+def descarga_en_curso():
+    """True si otro usuario está actualizando los datos en este momento."""
+    return _BLOQUEO_DESCARGA.locked()
+
+
+def cargar_todo(cantones, max_edad_s=None, refrescar=False):
     """Obtiene todas las fuentes en paralelo.
 
-    Arranque rápido: si SQLite tiene el dato de una fuente con menos de ``max_edad_s`` segundos, se usa sin
-    descargar (``_origen`` = «sqlite»). Si no, se descarga; y si la descarga falla se usa el último dato bueno.
+    Por defecto NO descarga nada de internet: usa lo guardado en SQLite sea cual sea su antigüedad, para que entrar a la
+    aplicación sea instantáneo aunque haya muchos usuarios. Solo descarga:
+    - con ``refrescar=True`` (botón «Actualizar datos»: ignora lo guardado), o
+    - si de una fuente no hay ningún dato (ni en SQLite ni en la semilla ``datos_semilla.json``): último recurso.
+    Con ``max_edad_s`` (segundos) se vuelve a descargar lo guardado hace más tiempo que eso. Si una descarga falla se usa
+    el último dato bueno (``_estado`` = «respaldo»).
     """
+    if refrescar:
+        max_edad_s = -1
+    else:
+        try:
+            almacen.importar_semilla()          # solo agrega lo que falta; no pisa nada
+        except Exception:  # noqa: BLE001
+            pass
     clave = _clave_cantones(cantones)
     tareas = {
         "noaa": (lambda: obtener_noaa_enso(), None),
@@ -365,7 +385,7 @@ def cargar_todo(cantones, max_edad_s=3 * 3600):
             guardado, edad = almacen.leer_fuente(nombre, k)
         except Exception:  # noqa: BLE001
             guardado, edad = None, None
-        if guardado is not None and edad is not None and edad < max_edad_s:
+        if guardado is not None and edad is not None and (max_edad_s is None or edad < max_edad_s):
             guardado.update({"_estado": "ok", "_origen": "sqlite", "_edad_s": edad})   # «_descargado» ya viene del almacén
             _ULTIMO_BUENO[nombre] = {k2: v for k2, v in guardado.items() if not k2.startswith("_")}
             return guardado
@@ -382,3 +402,14 @@ def cargar_todo(cantones, max_edad_s=3 * 3600):
     momentos = [r["_descargado"] for r in resultados.values() if r.get("_descargado")]
     resultados["_cargado"] = min(momentos).replace(microsecond=0) if momentos else datetime.datetime.now(datetime.timezone.utc)
     return resultados
+
+
+def actualizar_todo(cantones):
+    """Descarga de nuevo todas las fuentes (botón «Actualizar datos»). Si otro usuario ya está actualizando, no hace nada
+    y devuelve None; así un montón de clics no lanzan un montón de descargas."""
+    if not _BLOQUEO_DESCARGA.acquire(blocking=False):
+        return None
+    try:
+        return cargar_todo(cantones, refrescar=True)
+    finally:
+        _BLOQUEO_DESCARGA.release()

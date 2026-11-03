@@ -1276,9 +1276,10 @@ st.markdown(
 # ==========================================
 # 3. DATOS EN VIVO (NOAA, INOCAR, CIIFEN) Y MODELO DE RIESGO
 # ==========================================
-@st.cache_data(ttl=3 * 3600, show_spinner="Descargando datos de NOAA, INOCAR y CIIFEN…")
+@st.cache_data(show_spinner="Cargando los últimos datos guardados…")
 def cargar_datos_reales():
-    """Descarga todas las fuentes en paralelo; se guarda 3 horas. Si falla toda la lluvia no se guarda."""
+    """Lee los últimos datos guardados (SQLite o la semilla del repositorio): al entrar NO se descarga nada de internet.
+    Se renuevan solo con el botón «Actualizar datos», que descarga de nuevo y vacía esta caché."""
     datos = fuentes_datos.cargar_todo(CANTONES)
     if all((datos.get(k) or {}).get("_estado") == "error" for k in ("gfs", "cfsv2")):
         raise RuntimeError("No se pudo descargar ningún pronóstico de lluvia (NOAA GFS / CFSv2).")
@@ -1341,7 +1342,7 @@ def panel_enso_html(datos, indice_enso):
         hora = datos["_cargado"].astimezone(ZoneInfo("America/Guayaquil")).strftime("%d-%m-%Y %H:%M")
     except Exception:
         hora = "—"
-    lineas.append(f"<small>Datos descargados: {hora} (hora de Ecuador). Se renuevan cada 3 horas.</small>")
+    lineas.append(f"<small>Datos descargados: {hora} (hora de Ecuador). Se renuevan al pulsar «Actualizar datos».</small>")
     return '<div class="panel-enso">' + "<br>".join(lineas) + "</div>"
 
 
@@ -1422,9 +1423,14 @@ st.sidebar.markdown(
 st.sidebar.markdown("---")
 st.sidebar.header("🌊 Estado ENSO en vivo")
 st.sidebar.markdown(panel_enso_html(DATOS, INDICE_ENSO), unsafe_allow_html=True)
-if st.sidebar.button("🔄 Actualizar datos"):
-    st.cache_data.clear()
-    st.rerun()
+if st.sidebar.button("🔄 Actualizar datos", help="Descarga de nuevo NOAA, INOCAR y CIIFEN (tarda unos segundos). Al entrar a la aplicación no se descarga nada."):
+    with st.spinner("Descargando datos de NOAA, INOCAR y CIIFEN…"):
+        resultado = fuentes_datos.actualizar_todo(CANTONES)
+    if resultado is None:
+        st.sidebar.info("Otra persona ya está actualizando los datos; vuelve a cargar en unos segundos.")
+    else:
+        st.cache_data.clear()                 # la próxima lectura toma los datos recién guardados
+        st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.header("🗺️ Visor Geográfico")
@@ -1569,7 +1575,7 @@ with st.expander("📈 Histórico del ENSO y evolución del riesgo (almacén SQL
         st.plotly_chart(fig_e, use_container_width=True)
     elif estado_db:
         st.info("La evolución del riesgo se dibuja cuando hay al menos dos descargas guardadas "
-                f"(ahora hay {estado_db['fotos_riesgo']}). Se guarda una cada vez que se renuevan los datos (cada 3 horas).")
+                f"(ahora hay {estado_db['fotos_riesgo']}). Se guarda una cada vez que se actualizan los datos con el botón «Actualizar datos».")
 
     if estado_db:
         st.caption(
